@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav"><span class="signed-in-name">{{ current_user.name }}</span><a href="/me">我的紀錄</a><a class="quiet-link" href="/activities/{{ activity.id }}">返回活動</a></nav>
+    </header>
+
+    <main class="form-shell">
+      <section class="page-heading compact">
+        <p class="eyebrow">ATTENDANCE</p>
+        <h1>完成活動</h1>
+        <p>為「{{ activity.title }}」記錄正式參加者的出席結果。</p>
+      </section>
+
+      {% if error %}<div class="error-message" role="alert">{{ error }}</div>{% endif %}
+
+      <form class="attendance-form" action="/activities/{{ activity.id }}/attendance" method="post" onsubmit="return confirm('確定要儲存出席紀錄並完成活動嗎？')">
+        {% if registrations %}
+          <div class="attendance-list">
+            {% for registration in registrations %}
+              {% set existing = record_map.get(registration.id) %}
+              <fieldset class="attendance-item">
+                <legend><span class="avatar">{{ registration.user.name[0] }}</span><strong>{{ registration.user.name }}</strong></legend>
+                <label class="attendance-option attended-option">
+                  <input type="radio" name="attendance_{{ registration.id }}" value="attended" required {% if existing and existing.attendance_status == 'attended' %}checked{% endif %}>
+                  有出席
+                </label>
+                <label class="attendance-option absent-option">
+                  <input type="radio" name="attendance_{{ registration.id }}" value="absent" required {% if existing and existing.attendance_status == 'absent' %}checked{% endif %}>
+                  未出席
+                </label>
+              </fieldset>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state compact-empty">此活動沒有正式參加者，可以直接標記完成。</div>
+        {% endif %}
+
+        <button class="submit-button" type="submit">儲存紀錄並完成活動</button>
+      </form>
+    </main>
+  </body>
+</html>

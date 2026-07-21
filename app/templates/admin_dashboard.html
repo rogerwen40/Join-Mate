@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav"><span class="signed-in-name">管理者：{{ current_user.name }}</span><a href="/members">使用者列表</a><a class="quiet-link" href="/">返回活動列表</a></nav>
+    </header>
+
+    <main class="dashboard-shell">
+      <section class="page-heading compact">
+        <p class="eyebrow">PLATFORM OVERVIEW</p>
+        <h1>平台管理</h1>
+        <p>查看 JoinMate 的使用、成團與出席資料概況。</p>
+      </section>
+
+      <section class="admin-stats-grid">
+        <article class="stat-card accent-stat"><span>使用者</span><strong>{{ total_users }}</strong></article>
+        <article class="stat-card"><span>活動總數</span><strong>{{ total_activities }}</strong></article>
+        <article class="stat-card"><span>成團率</span><strong>{{ formation_rate }}%</strong></article>
+        <article class="stat-card"><span>出席率</span><strong>{{ attendance_rate }}%</strong></article>
+        <article class="stat-card"><span>取消率</span><strong>{{ cancellation_rate }}%</strong></article>
+        <article class="stat-card"><span>平均評分</span><strong>{% if average_rating is not none %}{{ average_rating }}{% else %}—{% endif %}</strong></article>
+      </section>
+
+      <section class="admin-detail-grid">
+        <article class="admin-panel">
+          <div class="section-heading"><h2>活動狀態</h2><span>{{ total_activities }} 場</span></div>
+          <div class="status-summary">
+            <div><span class="summary-dot open-dot"></span><strong>{{ open_count }}</strong><small>進行中</small></div>
+            <div><span class="summary-dot completed-dot"></span><strong>{{ completed_count }}</strong><small>已完成</small></div>
+            <div><span class="summary-dot cancelled-dot"></span><strong>{{ cancelled_count }}</strong><small>已取消</small></div>
+          </div>
+        </article>
+
+        <article class="admin-panel">
+          <div class="section-heading"><h2>出席結果</h2><span>{{ attended_count + absent_count }} 筆</span></div>
+          <div class="status-summary two-columns">
+            <div><span class="summary-dot open-dot"></span><strong>{{ attended_count }}</strong><small>有出席</small></div>
+            <div><span class="summary-dot cancelled-dot"></span><strong>{{ absent_count }}</strong><small>未出席</small></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="dashboard-section admin-panel">
+        <div class="section-heading"><h2>活動類型</h2><span>{{ type_counts|length }} 種</span></div>
+        {% if type_counts %}
+          <div class="type-chart">
+            {% for activity_type, count in type_counts %}
+              <div class="type-row">
+                <span>{{ activity_type }}</span>
+                <div class="type-track"><span style="width: {{ (count / max_type_count * 100)|round }}%"></span></div>
+                <strong>{{ count }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}<p class="muted">目前尚無活動資料。</p>{% endif %}
+      </section>
+
+      <section class="dashboard-section admin-panel">
+        <div class="section-heading"><h2>最近建立的活動</h2><span>最多 8 場</span></div>
+        {% if recent_activities %}
+          <div class="dashboard-list">
+            {% for activity in recent_activities %}
+              <a class="dashboard-row" href="/activities/{{ activity.id }}">
+                <div>
+                  <strong>{{ activity.title }}</strong>
+                  <small>{% if creator_by_activity_id.get(activity.id) %}{{ creator_by_activity_id[activity.id].name }} · {% endif %}{{ activity.created_at.strftime('%Y/%m/%d %H:%M') }}</small>
+                </div>
+                <span class="record-status {{ activity.status }}">{% if activity.status == 'open' %}進行中{% elif activity.status == 'completed' %}已完成{% else %}已取消{% endif %}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}<p class="muted">目前尚無活動。</p>{% endif %}
+      </section>
+    </main>
+  </body>
+</html>

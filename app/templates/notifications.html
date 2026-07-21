@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="30">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav"><span class="signed-in-name">{{ current_user.name }}</span><a href="/me">我的紀錄</a><a class="quiet-link" href="/">返回活動列表</a></nav>
+    </header>
+
+    <main class="form-shell">
+      <section class="page-heading compact notification-heading">
+        <div>
+          <p class="eyebrow">INBOX</p>
+          <h1>站內通知</h1>
+        </div>
+        <form action="/notifications/read-all" method="post">
+          <button class="quiet-button" type="submit">全部標示已讀</button>
+        </form>
+      </section>
+
+      <p class="reminder-note">通知頁每 30 秒自動更新；時間提醒只會發送給正式名單。</p>
+
+      {% if notifications %}
+        <div class="notification-list">
+          {% for notification in notifications %}
+            <article class="notification-item {% if not notification.is_read %}unread{% endif %}">
+              <span class="notification-dot" aria-hidden="true"></span>
+              <div class="notification-content">
+                <div class="notification-meta">
+                  <strong>{{ notification.user.name }}</strong>
+                  <time>{{ notification.created_at.strftime('%Y/%m/%d %H:%M') }}</time>
+                </div>
+                <p>{{ notification.message }}</p>
+                <a href="/activities/{{ notification.activity.id }}">查看活動</a>
+              </div>
+              {% if not notification.is_read %}
+                <form action="/notifications/{{ notification.id }}/read" method="post">
+                  <button class="read-button" type="submit">標示已讀</button>
+                </form>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state"><strong>目前沒有通知</strong><p>成員報名或候補狀態改變時，通知會出現在這裡。</p></div>
+      {% endif %}
+    </main>
+  </body>
+</html>

@@ -1,0 +1,1 @@
+"""JoinMate application package."""

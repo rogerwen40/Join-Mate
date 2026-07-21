@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav"><span class="signed-in-name">{{ current_user.name }}</span><a href="/me">我的紀錄</a><a href="/notifications">通知</a><a class="quiet-link" href="/">返回活動列表</a></nav>
+    </header>
+
+    <main class="form-shell">
+      <section class="page-heading compact">
+        <p class="eyebrow">NEW ACTIVITY</p>
+        <h1>建立活動</h1>
+        <p>先填寫最必要的資訊，之後再加入報名截止與通知。</p>
+      </section>
+
+      {% if error %}
+        <div class="error-message" role="alert">{{ error }}</div>
+      {% endif %}
+
+      <form class="activity-form" action="/activities" method="post">
+        <label>
+          活動名稱
+          <input name="title" minlength="2" maxlength="100" required placeholder="例如：週五午餐團">
+        </label>
+
+        <div class="form-row">
+          <label>
+            活動類型
+            <select name="activity_type" required>
+              <option value="吃飯">吃飯</option>
+              <option value="運動">運動</option>
+              <option value="桌遊">桌遊</option>
+              <option value="討論">討論</option>
+              <option value="其他">其他</option>
+            </select>
+          </label>
+          <label>
+            日期與時間
+            <input type="datetime-local" name="starts_at" required>
+          </label>
+        </div>
+
+        <label>
+          地點
+          <input name="location" minlength="2" maxlength="150" required placeholder="例如：台北車站或社區活動中心">
+        </label>
+
+        <div class="form-row three">
+          <label>
+            最低成團人數
+            <input type="number" name="min_people" min="2" max="100" value="3" required>
+          </label>
+          <label>
+            最高人數
+            <input type="number" name="max_people" min="2" max="100" value="6" required>
+          </label>
+          <label>
+            每人費用（元）
+            <input type="number" name="fee" min="0" max="100000" value="0" required>
+          </label>
+        </div>
+
+        <label>
+          活動說明
+          <textarea name="description" maxlength="1000" rows="5" placeholder="集合方式、需要攜帶的物品等"></textarea>
+        </label>
+
+        <button class="submit-button" type="submit">建立活動</button>
+      </form>
+    </main>
+  </body>
+</html>

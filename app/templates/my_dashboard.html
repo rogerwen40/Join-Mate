@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav"><span class="signed-in-name">{{ current_user.name }}</span><a href="/notifications">通知</a><a class="quiet-link" href="/">返回活動列表</a></nav>
+    </header>
+
+    <main class="dashboard-shell">
+      <section class="page-heading compact">
+        <p class="eyebrow">MY ACTIVITY</p>
+        <h1>我的紀錄</h1>
+        <p>{{ current_user.name }} 的活動、報名與出席摘要。</p>
+      </section>
+
+      <section class="stats-grid" aria-label="個人統計">
+        <article class="stat-card accent-stat"><span>出席率</span><strong>{% if attendance_rate is not none %}{{ attendance_rate }}%{% else %}—{% endif %}</strong></article>
+        <article class="stat-card"><span>有出席</span><strong>{{ attended_count }}</strong></article>
+        <article class="stat-card"><span>未出席</span><strong>{{ absent_count }}</strong></article>
+        <article class="stat-card"><span>建立活動</span><strong>{{ created_activities|length }}</strong></article>
+        <article class="stat-card"><span>取消／未轉正</span><strong>{{ cancelled_count }}</strong></article>
+      </section>
+
+      <section class="dashboard-section">
+        <div class="section-heading"><h2>即將參加</h2><span>{{ upcoming_registrations|length }} 場</span></div>
+        {% if upcoming_registrations %}
+          <div class="dashboard-list">
+            {% for registration in upcoming_registrations %}
+              <a class="dashboard-row" href="/activities/{{ registration.activity.id }}">
+                <div><strong>{{ registration.activity.title }}</strong><small>{{ registration.activity.starts_at.strftime('%Y/%m/%d %H:%M') }} · {{ registration.activity.location }}</small></div>
+                <span class="record-status {{ registration.status }}">{% if registration.status == 'registered' %}正式名單{% else %}候補中{% endif %}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}<div class="empty-state compact-empty">目前沒有即將參加的活動。</div>{% endif %}
+      </section>
+
+      <section class="dashboard-section">
+        <div class="section-heading"><h2>我建立的活動</h2><span>{{ created_activities|length }} 場</span></div>
+        {% if created_activities %}
+          <div class="dashboard-list">
+            {% for activity in created_activities %}
+              <a class="dashboard-row" href="/activities/{{ activity.id }}">
+                <div><strong>{{ activity.title }}</strong><small>{{ activity.starts_at.strftime('%Y/%m/%d %H:%M') }} · {{ activity.location }}</small></div>
+                <span class="record-status {{ activity.status }}">{% if activity.status == 'open' %}進行中{% elif activity.status == 'completed' %}已完成{% else %}已取消{% endif %}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}<div class="empty-state compact-empty">你還沒有建立活動。</div>{% endif %}
+      </section>
+
+      <section class="dashboard-section">
+        <div class="section-heading"><h2>歷史紀錄</h2><span>{{ history_registrations|length }} 筆</span></div>
+        {% if history_registrations %}
+          <div class="dashboard-list">
+            {% for registration in history_registrations %}
+              {% set attendance = attendance_map.get(registration.id) %}
+              <a class="dashboard-row" href="/activities/{{ registration.activity.id }}">
+                <div><strong>{{ registration.activity.title }}</strong><small>{{ registration.activity.starts_at.strftime('%Y/%m/%d %H:%M') }}</small></div>
+                {% if attendance %}
+                  <span class="record-status {{ attendance.attendance_status }}">{% if attendance.attendance_status == 'attended' %}有出席{% else %}未出席{% endif %}</span>
+                {% elif registration.status == 'cancelled' %}
+                  <span class="record-status cancelled">已取消／未轉正</span>
+                {% else %}
+                  <span class="record-status">尚無出席紀錄</span>
+                {% endif %}
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}<div class="empty-state compact-empty">目前還沒有歷史紀錄。</div>{% endif %}
+      </section>
+    </main>
+  </body>
+</html>

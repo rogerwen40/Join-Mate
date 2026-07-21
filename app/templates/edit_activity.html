@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav"><span class="signed-in-name">{{ current_user.name }}</span><a href="/me">我的紀錄</a><a class="quiet-link" href="/activities/{{ activity.id }}">返回活動</a></nav>
+    </header>
+
+    <main class="form-shell">
+      <section class="page-heading compact">
+        <p class="eyebrow">EDIT ACTIVITY</p>
+        <h1>編輯活動</h1>
+        <p>只有活動建立者可以修改以下資料。</p>
+      </section>
+
+      {% if error %}<div class="error-message" role="alert">{{ error }}</div>{% endif %}
+
+      <form class="activity-form" action="/activities/{{ activity.id }}/edit" method="post">
+        <label>活動名稱<input name="title" minlength="2" maxlength="100" required value="{{ activity.title }}"></label>
+        <div class="form-row">
+          <label>
+            活動類型
+            <select name="activity_type" required>
+              {% for option in ['吃飯', '運動', '桌遊', '討論', '其他'] %}<option value="{{ option }}" {% if activity.activity_type == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>日期與時間<input type="datetime-local" name="starts_at" required value="{{ activity.starts_at.strftime('%Y-%m-%dT%H:%M') }}"></label>
+        </div>
+        <label>地點<input name="location" minlength="2" maxlength="150" required value="{{ activity.location }}"></label>
+        <div class="form-row three">
+          <label>最低成團人數<input type="number" name="min_people" min="2" max="100" value="{{ activity.min_people }}" required></label>
+          <label>最高人數<input type="number" name="max_people" min="2" max="100" value="{{ activity.max_people }}" required></label>
+          <label>每人費用（元）<input type="number" name="fee" min="0" max="100000" value="{{ activity.fee }}" required></label>
+        </div>
+        <label>活動說明<textarea name="description" maxlength="1000" rows="5">{{ activity.description }}</textarea></label>
+        <button class="submit-button" type="submit">儲存修改</button>
+      </form>
+    </main>
+  </body>
+</html>

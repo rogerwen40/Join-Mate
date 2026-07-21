@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <a class="quiet-link" href="/account/setup">第一次使用？建立帳號</a>
+    </header>
+
+    <main class="auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">WELCOME BACK</p>
+        <h1>成員登入</h1>
+        <p class="auth-intro">使用註冊 Email 與 4 位數登入碼登入。</p>
+        {% if error %}<div class="error-message" role="alert">{{ error }}</div>{% endif %}
+        <form class="auth-form" action="/login" method="post">
+          <label>Email<input type="email" name="email" autocomplete="email" required></label>
+          <label>4 位數登入碼<input type="password" name="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="current-password" required></label>
+          <button class="submit-button" type="submit">登入 JoinMate</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

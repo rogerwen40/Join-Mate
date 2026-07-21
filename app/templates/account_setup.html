@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <a class="quiet-link" href="/login">已有帳號？登入</a>
+    </header>
+
+    <main class="auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">CREATE ACCOUNT</p>
+        <h1>建立帳號</h1>
+        <p class="auth-intro">輸入自己的姓名與 Email，並設定 4 位數登入碼，例如生日月日 0528。</p>
+        {% if error %}<div class="error-message" role="alert">{{ error }}</div>{% endif %}
+
+        <form class="auth-form" action="/account/setup" method="post">
+          <label>姓名<input name="name" minlength="2" maxlength="80" autocomplete="name" required placeholder="你的姓名或暱稱"></label>
+          <label>Email<input type="email" name="email" maxlength="255" autocomplete="email" required placeholder="name@example.com"></label>
+          <label>4 位數登入碼<input type="password" name="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="new-password" required placeholder="例如 0528"></label>
+          <label>再次輸入登入碼<input type="password" name="password_confirm" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="new-password" required></label>
+          <button class="submit-button" type="submit">建立帳號並登入</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

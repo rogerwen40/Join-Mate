@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}｜JoinMate</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav">
+        {% if current_user %}<span class="signed-in-name">{{ current_user.name }}</span><a href="/me">我的紀錄</a><a href="/notifications">通知</a>{% else %}<a href="/login">登入</a>{% endif %}
+        <a class="quiet-link" href="/">返回活動列表</a>
+      </nav>
+    </header>
+
+    <main class="detail-shell">
+      {% if notice %}<div class="success-message" role="status">{{ notice }}</div>{% endif %}
+
+      <article class="detail-card">
+        <div class="activity-card-topline">
+          <span class="category">{{ activity.activity_type }}</span>
+          <span class="status">{{ capacity_status }}</span>
+        </div>
+        <h1>{{ activity.title }}</h1>
+
+        <dl class="detail-list">
+          <div><dt>日期與時間</dt><dd>{{ activity.starts_at.strftime('%Y/%m/%d %H:%M') }}</dd></div>
+          <div><dt>地點</dt><dd>{{ activity.location }}</dd></div>
+          <div><dt>目前人數</dt><dd>{{ confirmed|length }}／{{ activity.max_people }} 人</dd></div>
+          <div><dt>成團條件</dt><dd>最低 {{ activity.min_people }} 人</dd></div>
+          <div><dt>費用</dt><dd>{% if activity.fee %}每人 {{ activity.fee }} 元{% else %}免費{% endif %}</dd></div>
+          <div><dt>建立者</dt><dd>{% if creator %}{{ creator.name }}{% else %}舊活動，未記錄{% endif %}</dd></div>
+        </dl>
+
+        {% if activity.description %}
+          <section class="description"><h2>活動說明</h2><p>{{ activity.description }}</p></section>
+        {% endif %}
+
+        {% if is_creator and activity.status == 'open' %}
+          <section class="owner-actions">
+            <div><strong>建立者管理</strong><p>你可以修改資料，或取消整場活動。</p></div>
+            <div class="owner-buttons">
+              <a class="primary-link" href="/activities/{{ activity.id }}/attendance">完成與出席</a>
+              <a class="quiet-link" href="/activities/{{ activity.id }}/edit">編輯活動</a>
+              <form action="/activities/{{ activity.id }}/cancel" method="post" onsubmit="return confirm('確定要取消這場活動嗎？所有參加者都會收到通知。')">
+                <button class="danger-button" type="submit">取消活動</button>
+              </form>
+            </div>
+          </section>
+        {% endif %}
+
+        {% if is_creator and activity.status == 'completed' %}
+          <section class="owner-actions">
+            <div><strong>活動已完成</strong><p>需要修正時，建立者仍可更新出席紀錄。</p></div>
+            <a class="quiet-link" href="/activities/{{ activity.id }}/attendance">修改出席紀錄</a>
+          </section>
+        {% endif %}
+
+        <section class="signup-panel">
+          <h2>報名活動</h2>
+          {% if activity.status != 'open' %}
+            <p class="muted">此活動已{% if activity.status == 'completed' %}完成{% else %}取消{% endif %}，無法報名。</p>
+          {% elif current_user and not current_registration %}
+            <form class="signup-form" action="/activities/{{ activity.id }}/registrations" method="post">
+              <p>將以 <strong>{{ current_user.name }}</strong> 的身分報名。</p>
+              <button class="submit-button" type="submit">替自己報名</button>
+            </form>
+          {% elif current_registration %}
+            <p class="muted">你目前在{% if current_registration.status == 'registered' %}正式名單{% else %}候補名單{% endif %}中。</p>
+          {% else %}
+            <p class="muted">請先<a href="/login">登入</a>，才能報名活動。</p>
+          {% endif %}
+        </section>
+
+        <section class="roster-section">
+          <div class="section-heading"><h2>正式名單</h2><span>{{ confirmed|length }} 人</span></div>
+          {% if confirmed %}
+            <div class="roster-list">
+              {% for registration in confirmed %}
+                <div class="roster-item">
+                  <div><span class="avatar">{{ registration.user.name[0] }}</span><strong>{{ registration.user.name }}</strong></div>
+                  {% set attendance = attendance_by_registration_id.get(registration.id) %}
+                  {% if attendance and (is_creator or (current_user and registration.user_id == current_user.id)) %}
+                    <span class="attendance-badge {{ attendance.attendance_status }}">{% if attendance.attendance_status == 'attended' %}有出席{% else %}未出席{% endif %}</span>
+                  {% endif %}
+                  {% if current_user and registration.user_id == current_user.id %}
+                    {% if activity.status == 'open' %}<form action="/activities/{{ activity.id }}/registrations/{{ registration.id }}/cancel" method="post"><button class="cancel-button" type="submit">取消</button></form>{% endif %}
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}<p class="muted">還沒有人報名。</p>{% endif %}
+        </section>
+
+        {% if waitlisted %}
+          <section class="roster-section waitlist-section">
+            <div class="section-heading"><h2>候補名單</h2><span>{{ waitlisted|length }} 人</span></div>
+            <div class="roster-list">
+              {% for registration in waitlisted %}
+                <div class="roster-item">
+                  <div><span class="avatar muted-avatar">{{ registration.user.name[0] }}</span><strong>{{ registration.user.name }}</strong></div>
+                  {% if current_user and registration.user_id == current_user.id %}
+                    <form action="/activities/{{ activity.id }}/registrations/{{ registration.id }}/cancel" method="post"><button class="cancel-button" type="submit">取消候補</button></form>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </section>
+        {% endif %}
+
+        {% if activity.status == 'completed' %}
+          <section class="feedback-section">
+            <div class="feedback-heading">
+              <div><h2>活動評價</h2><p>{{ feedbacks|length }} 則回饋</p></div>
+              {% if average_rating is not none %}<strong class="average-rating">★ {{ average_rating }}</strong>{% endif %}
+            </div>
+
+            {% if can_review %}
+              <form class="feedback-form" action="/activities/{{ activity.id }}/feedback" method="post">
+                <label>
+                  評分
+                  <select name="rating" required>
+                    {% for score in [5, 4, 3, 2, 1] %}<option value="{{ score }}" {% if current_feedback and current_feedback.rating == score %}selected{% endif %}>{{ score }} 分</option>{% endfor %}
+                  </select>
+                </label>
+                <label>
+                  意見（選填）
+                  <textarea name="comment" maxlength="500" rows="3" placeholder="分享活動體驗或改善建議">{% if current_feedback %}{{ current_feedback.comment }}{% endif %}</textarea>
+                </label>
+                <button class="submit-button" type="submit">{% if current_feedback %}更新評價{% else %}送出評價{% endif %}</button>
+              </form>
+            {% elif current_user %}
+              <p class="muted">只有本場被記錄為有出席的正式參加者可以評價。</p>
+            {% else %}
+              <p class="muted"><a href="/login">登入</a>後可查看自己是否具備評價資格。</p>
+            {% endif %}
+
+            {% if feedbacks %}
+              <div class="feedback-list">
+                {% for feedback in feedbacks %}
+                  <article class="feedback-item">
+                    <div class="feedback-meta">
+                      <strong>{{ feedback_users[feedback.user_id].name }}</strong>
+                      <span class="stars">{% for _ in range(feedback.rating) %}★{% endfor %}{% for _ in range(5 - feedback.rating) %}☆{% endfor %}</span>
+                    </div>
+                    {% if feedback.comment %}<p>{{ feedback.comment }}</p>{% endif %}
+                  </article>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="muted">目前還沒有活動評價。</p>
+            {% endif %}
+          </section>
+        {% endif %}
+      </article>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">JoinMate</a>
+      <nav class="topnav">
+        {% if current_user %}
+          <span class="signed-in-name">{{ current_user.name }}</span>
+          <a href="/me">我的紀錄</a>
+          <a href="/notifications">通知{% if unread_count %}（{{ unread_count }}）{% endif %}</a>
+          {% if is_admin %}<a href="/admin">平台管理</a>{% endif %}
+          <a class="primary-link" href="/activities/new">＋ 建立活動</a>
+          <form class="inline-form" action="/logout" method="post"><button class="text-button" type="submit">登出</button></form>
+        {% else %}
+          <a href="/account/setup">首次設定</a>
+          <a class="primary-link" href="/login">登入</a>
+        {% endif %}
+      </nav>
+    </header>
+
+    <main class="shell">
+      <section class="page-heading">
+        <p class="eyebrow">ACTIVITY HUB</p>
+        <h1>讓興趣 Meet 夥伴</h1>
+        <p>先從幾個人的活動開始，讓每次邀約都清楚又好追蹤。</p>
+      </section>
+
+      <form class="activity-filters" action="/" method="get">
+        <label class="search-field">
+          <span>關鍵字</span>
+          <input type="search" name="q" value="{{ filters.q }}" placeholder="搜尋名稱、說明或地點">
+        </label>
+        <label>
+          <span>類型</span>
+          <select name="activity_type">
+            <option value="">全部類型</option>
+            {% for option in activity_types %}<option value="{{ option }}" {% if filters.activity_type == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>日期</span>
+          <input type="date" name="activity_date" value="{{ filters.activity_date }}">
+        </label>
+        <label>
+          <span>地點</span>
+          <input name="location" value="{{ filters.location }}" placeholder="輸入地點">
+        </label>
+        <label>
+          <span>狀態</span>
+          <select name="status_filter">
+            <option value="open" {% if filters.status_filter == 'open' %}selected{% endif %}>進行中</option>
+            <option value="completed" {% if filters.status_filter == 'completed' %}selected{% endif %}>已完成</option>
+            <option value="cancelled" {% if filters.status_filter == 'cancelled' %}selected{% endif %}>已取消</option>
+            <option value="all" {% if filters.status_filter == 'all' %}selected{% endif %}>全部狀態</option>
+          </select>
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" name="available_only" value="true" {% if filters.available_only %}checked{% endif %}>
+          只看可報名
+        </label>
+        <div class="filter-actions">
+          <button class="submit-button" type="submit">套用篩選</button>
+          <a href="/">清除</a>
+        </div>
+      </form>
+
+      <section>
+        <div class="section-heading">
+          <h2>目前活動</h2>
+          <span>{{ activities|length }} 場</span>
+        </div>
+
+        {% if activities %}
+          <div class="activity-grid">
+            {% for activity in activities %}
+              <a class="activity-card" href="/activities/{{ activity.id }}">
+                <div class="activity-card-topline">
+                  <span class="category">{{ activity.activity_type }}</span>
+                  <span class="status">{{ capacity_statuses[activity.id] }}</span>
+                </div>
+                <h3>{{ activity.title }}</h3>
+                {% if average_ratings.get(activity.id) is not none %}<p class="card-rating">★ {{ average_ratings[activity.id] }} · 活動評價</p>{% endif %}
+                <dl>
+                  <div>
+                    <dt>時間</dt>
+                    <dd>{{ activity.starts_at.strftime('%Y/%m/%d %H:%M') }}</dd>
+                  </div>
+                  <div>
+                    <dt>地點</dt>
+                    <dd>{{ activity.location }}</dd>
+                  </div>
+                  <div>
+                    <dt>人數</dt>
+                    <dd>{{ registered_counts.get(activity.id, 0) }}／{{ activity.max_people }} 人 · 最低 {{ activity.min_people }} 人</dd>
+                  </div>
+                </dl>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">
+            <strong>沒有符合條件的活動</strong>
+            <p>可以清除篩選重新查看，或建立一場新的活動。</p>
+            <div class="empty-actions"><a class="quiet-link" href="/">清除篩選</a>{% if current_user %}<a class="primary-link" href="/activities/new">建立活動</a>{% endif %}</div>
+          </div>
+        {% endif %}
+      </section>
+    </main>
+  </body>
+</html>
