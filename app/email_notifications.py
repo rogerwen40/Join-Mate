@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine
+from app.activity_formatting import detect_activity_emoji
 from app.models import (
     Activity,
     EmailDelivery,
@@ -224,12 +225,13 @@ def send_pending_emails() -> int:
                 confirmed_count=confirmed_count,
             )
             reason = _email_reason(notification.message)
-            subject = f"[JoinMate] {reason}｜{activity.title}"
+            activity_emoji = detect_activity_emoji(activity)
+            subject = f"[JoinMate] {reason}｜{activity_emoji} {activity.title}"
             body = (
                 f"{user.name} 您好：\n\n"
                 f"{notification.message}\n\n"
                 "活動資訊\n"
-                f"活動：{activity.title}\n"
+                f"活動：{activity_emoji} {activity.title}\n"
                 f"{text_details}\n"
                 f"報名／查看連結：{activity_url}\n\n"
                 "此信由 JoinMate 自動寄出。"
@@ -238,7 +240,7 @@ def send_pending_emails() -> int:
                 f"<p>{html.escape(user.name)} 您好：</p>"
                 f"<p>{html.escape(notification.message)}</p>"
                 "<h3 style=\"margin-bottom:8px\">活動資訊</h3>"
-                f"<p><strong>活動：</strong>{html.escape(activity.title)}<br>"
+                f"<p><strong>活動：</strong>{activity_emoji} {html.escape(activity.title)}<br>"
                 f"{html_details}</p>"
                 f'<p><a href="{html.escape(activity_url, quote=True)}">'
                 "前往 JoinMate 報名／查看活動</a></p>"

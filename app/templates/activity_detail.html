@@ -23,7 +23,7 @@
           <span class="category">{{ activity.activity_type }}</span>
           <span class="status">{{ capacity_status }}</span>
         </div>
-        <h1>{{ activity.title }}</h1>
+        <h1><span aria-hidden="true">{{ activity_emoji }}</span> {{ activity.title }}</h1>
 
         {% if is_creator %}
           <section class="share-panel">

@@ -84,7 +84,7 @@
                   <span class="category">{{ activity.activity_type }}</span>
                   <span class="status">{{ capacity_statuses[activity.id] }}</span>
                 </div>
-                <h3>{{ activity.title }}</h3>
+                <h3><span aria-hidden="true">{{ activity_emojis[activity.id] }}</span> {{ activity.title }}</h3>
                 {% if average_ratings.get(activity.id) is not none %}<p class="card-rating">★ {{ average_ratings[activity.id] }} · 活動評價</p>{% endif %}
                 <dl>
                   <div>

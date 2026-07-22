@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import Base, SessionLocal, engine, get_db
 from app.auth import get_current_user, hash_password, require_current_user, verify_password
+from app.activity_formatting import detect_activity_emoji
 from app.email_notifications import (
     get_email_preferences,
     queue_notification,
@@ -99,13 +100,6 @@ NOTICE_MESSAGES = {
     "invalid_invite_code": "邀請碼不正確，請確認後再試一次。",
 }
 
-ACTIVITY_EMOJIS = {
-    "吃飯": "🍽️",
-    "運動": "🏸",
-    "桌遊": "🎲",
-    "討論": "💬",
-    "其他": "🎉",
-}
 WEEKDAYS_ZH = ("一", "二", "三", "四", "五", "六", "日")
 
 
@@ -116,7 +110,7 @@ def build_activity_share_text(
     share_url: str,
     visibility: str,
 ) -> str:
-    emoji = ACTIVITY_EMOJIS.get(activity.activity_type, "🎉")
+    emoji = detect_activity_emoji(activity)
     starts_at = activity.starts_at
     date_text = (
         f"{starts_at.year}/{starts_at.month}/{starts_at.day}"
@@ -306,6 +300,9 @@ def home(
         for activity_id, average_rating in rating_rows
     }
     capacity_statuses: dict[int, str] = {}
+    activity_emojis = {
+        activity.id: detect_activity_emoji(activity) for activity in activities
+    }
     for activity in activities:
         current_count = registered_counts.get(activity.id, 0)
         if activity.status == "completed":
@@ -338,6 +335,7 @@ def home(
             "registered_counts": registered_counts,
             "capacity_statuses": capacity_statuses,
             "average_ratings": average_ratings,
+            "activity_emojis": activity_emojis,
             "filters": {
                 "q": normalized_query or "",
                 "activity_type": activity_type or "",
@@ -1015,6 +1013,7 @@ def activity_detail(
             "capacity_status": capacity_status,
             "notice": NOTICE_MESSAGES.get(notice),
             "visibility": access.visibility if access is not None else "public",
+            "activity_emoji": detect_activity_emoji(activity),
             "share_url": share_url,
             "share_text": build_activity_share_text(
                 activity,
