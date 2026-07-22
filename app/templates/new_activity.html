@@ -71,8 +71,36 @@
           <textarea name="description" maxlength="1000" rows="5" placeholder="集合方式、需要攜帶的物品等"></textarea>
         </label>
 
+        <section class="form-section">
+          <h2>分享與隱私</h2>
+          <label>
+            誰可以看到這個活動
+            <select name="visibility" id="visibility" required>
+              <option value="public">公開｜顯示在首頁，所有人都能報名</option>
+              <option value="link">只限連結｜不顯示在首頁，拿到專屬連結才能查看</option>
+              <option value="code">邀請碼｜不顯示在首頁，輸入邀請碼才能報名</option>
+            </select>
+          </label>
+          <label id="invite-code-field" hidden>
+            邀請碼
+            <input name="invite_code" minlength="4" maxlength="20" placeholder="請設定 4～20 個字元">
+          </label>
+        </section>
+
         <button class="submit-button" type="submit">建立活動</button>
       </form>
     </main>
+    <script>
+      const visibility = document.querySelector('#visibility');
+      const codeField = document.querySelector('#invite-code-field');
+      const codeInput = codeField.querySelector('input');
+      function updateCodeField() {
+        const needsCode = visibility.value === 'code';
+        codeField.hidden = !needsCode;
+        codeInput.required = needsCode;
+      }
+      visibility.addEventListener('change', updateCodeField);
+      updateCodeField();
+    </script>
   </body>
 </html>

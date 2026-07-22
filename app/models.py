@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -143,6 +143,44 @@ class ActivityOwnership(Base):
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class ActivityAccess(Base):
+    __tablename__ = "activity_access"
+    __table_args__ = (
+        CheckConstraint(
+            "visibility IN ('public', 'link', 'code')",
+            name="ck_activity_access_visibility",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    activity_id: Mapped[int] = mapped_column(
+        ForeignKey("activities.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    visibility: Mapped[str] = mapped_column(String(20), default="public")
+    share_token: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    invite_code_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class EmailPreference(Base):
+    __tablename__ = "email_preferences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    registration: Mapped[bool] = mapped_column(Boolean, default=True)
+    activity_changes: Mapped[bool] = mapped_column(Boolean, default=True)
+    promotion: Mapped[bool] = mapped_column(Boolean, default=True)
+    formed: Mapped[bool] = mapped_column(Boolean, default=True)
+    reminder_24h: Mapped[bool] = mapped_column(Boolean, default=False)
+    reminder_1h: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class LoginAttempt(Base):

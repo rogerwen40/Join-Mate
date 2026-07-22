@@ -39,8 +39,30 @@
           <label>每人費用（元）<input type="number" name="fee" min="0" max="100000" value="{{ activity.fee }}" required></label>
         </div>
         <label>活動說明<textarea name="description" maxlength="1000" rows="5">{{ activity.description }}</textarea></label>
+        <section class="form-section">
+          <h2>分享與隱私</h2>
+          <label>
+            誰可以看到這個活動
+            <select name="visibility" id="visibility" required>
+              <option value="public" {% if visibility == 'public' %}selected{% endif %}>公開｜顯示在首頁</option>
+              <option value="link" {% if visibility == 'link' %}selected{% endif %}>只限連結｜不顯示在首頁</option>
+              <option value="code" {% if visibility == 'code' %}selected{% endif %}>邀請碼｜輸入邀請碼才能報名</option>
+            </select>
+          </label>
+          <label id="invite-code-field" {% if visibility != 'code' %}hidden{% endif %}>
+            邀請碼
+            <input name="invite_code" minlength="4" maxlength="20" placeholder="{% if has_invite_code %}留空表示沿用原邀請碼{% else %}請設定 4～20 個字元{% endif %}">
+          </label>
+        </section>
         <button class="submit-button" type="submit">儲存修改</button>
       </form>
     </main>
+    <script>
+      const visibility = document.querySelector('#visibility');
+      const codeField = document.querySelector('#invite-code-field');
+      function updateCodeField() { codeField.hidden = visibility.value !== 'code'; }
+      visibility.addEventListener('change', updateCodeField);
+      updateCodeField();
+    </script>
   </body>
 </html>

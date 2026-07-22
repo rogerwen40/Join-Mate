@@ -18,9 +18,14 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import Base, SessionLocal, engine, get_db
 from app.auth import get_current_user, hash_password, require_current_user, verify_password
-from app.email_notifications import queue_notification, send_pending_emails
+from app.email_notifications import (
+    get_email_preferences,
+    queue_notification,
+    send_pending_emails,
+)
 from app.models import (
     Activity,
+    ActivityAccess,
     ActivityFeedback,
     ActivityOwnership,
     AdminUser,
@@ -86,6 +91,7 @@ NOTICE_MESSAGES = {
     "activity_cancelled": "活動已取消，參加者已收到通知。",
     "activity_completed": "活動已完成，出席紀錄與通知已更新。",
     "feedback_saved": "你的活動評價已儲存。",
+    "invalid_invite_code": "邀請碼不正確，請確認後再試一次。",
 }
 
 
@@ -95,13 +101,35 @@ def add_notification(
     user_id: int,
     activity_id: int,
     message: str,
+    email_event: str | None = None,
 ) -> None:
     queue_notification(
         database,
         user_id=user_id,
         activity_id=activity_id,
         message=message,
+        email_event=email_event,
     )
+
+
+def get_activity_access(database: Session, activity_id: int) -> ActivityAccess | None:
+    return database.scalar(
+        select(ActivityAccess).where(ActivityAccess.activity_id == activity_id)
+    )
+
+
+def has_link_access(request: Request, activity_id: int) -> bool:
+    activity_ids = request.session.get("link_activity_ids", [])
+    return isinstance(activity_ids, list) and activity_id in activity_ids
+
+
+def grant_link_access(request: Request, activity_id: int) -> None:
+    activity_ids = request.session.get("link_activity_ids", [])
+    if not isinstance(activity_ids, list):
+        activity_ids = []
+    request.session["link_activity_ids"] = list(
+        dict.fromkeys([*activity_ids, activity_id])
+    )[-20:]
 
 
 def require_session_user_id(request: Request) -> int:
@@ -168,7 +196,16 @@ def home(
         .correlate(Activity)
         .scalar_subquery()
     )
-    statement = select(Activity)
+    statement = (
+        select(Activity)
+        .outerjoin(ActivityAccess, ActivityAccess.activity_id == Activity.id)
+        .where(
+            or_(
+                ActivityAccess.id.is_(None),
+                ActivityAccess.visibility == "public",
+            )
+        )
+    )
     normalized_query = q.strip() if q else None
     normalized_location = location.strip() if location else None
     if normalized_query:
@@ -337,6 +374,8 @@ def my_dashboard(
     cancelled_count = sum(
         registration.status == "cancelled" for registration in registrations
     )
+    email_preferences = get_email_preferences(database, current_user.id)
+    database.commit()
 
     return templates.TemplateResponse(
         request=request,
@@ -352,8 +391,30 @@ def my_dashboard(
             "absent_count": absent_count,
             "attendance_rate": attendance_rate,
             "cancelled_count": cancelled_count,
+            "email_preferences": email_preferences,
         },
     )
+
+
+@app.post("/me/email-preferences")
+async def update_email_preferences(
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    current_user = require_current_user(request, database)
+    form_data = await request.form()
+    preferences = get_email_preferences(database, current_user.id)
+    for field in (
+        "registration",
+        "activity_changes",
+        "promotion",
+        "formed",
+        "reminder_24h",
+        "reminder_1h",
+    ):
+        setattr(preferences, field, form_data.get(field) == "on")
+    database.commit()
+    return RedirectResponse(url="/me?email_saved=1", status_code=303)
 
 
 @app.get("/activities/new", response_class=HTMLResponse)
@@ -743,16 +804,26 @@ def create_activity(
     max_people: Annotated[int, Form(ge=2, le=100)],
     fee: Annotated[int, Form(ge=0, le=100000)] = 0,
     description: Annotated[str, Form(max_length=1000)] = "",
+    visibility: Annotated[str, Form()] = "public",
+    invite_code: Annotated[str, Form(max_length=20)] = "",
     database: Session = Depends(get_db),
 ):
     current_user = require_current_user(request, database)
+    normalized_invite_code = invite_code.strip()
+    error = None
     if max_people < min_people:
+        error = "最高人數不能小於最低成團人數。"
+    elif visibility not in {"public", "link", "code"}:
+        error = "請選擇有效的活動分享方式。"
+    elif visibility == "code" and not 4 <= len(normalized_invite_code) <= 20:
+        error = "邀請碼需為 4～20 個字元。"
+    if error is not None:
         return templates.TemplateResponse(
             request=request,
             name="new_activity.html",
             context={
                 "page_title": "建立活動",
-                "error": "最高人數不能小於最低成團人數。",
+                "error": error,
                 "current_user": current_user,
             },
             status_code=422,
@@ -773,6 +844,16 @@ def create_activity(
     database.add(
         ActivityOwnership(activity_id=activity.id, user_id=current_user.id)
     )
+    database.add(
+        ActivityAccess(
+            activity_id=activity.id,
+            visibility=visibility,
+            share_token=secrets.token_urlsafe(24),
+            invite_code_hash=(
+                hash_password(normalized_invite_code) if visibility == "code" else None
+            ),
+        )
+    )
     database.commit()
 
     return RedirectResponse(url=f"/activities/{activity.id}", status_code=303)
@@ -790,6 +871,7 @@ def activity_detail(
         raise HTTPException(status_code=404, detail="找不到活動")
 
     current_user = get_current_user(request, database)
+    access = get_activity_access(database, activity_id)
     ownership = database.scalar(
         select(ActivityOwnership).where(ActivityOwnership.activity_id == activity_id)
     )
@@ -799,6 +881,23 @@ def activity_detail(
         and ownership is not None
         and ownership.user_id == current_user.id
     )
+    current_user_has_registration = False
+    if current_user is not None:
+        current_user_has_registration = database.scalar(
+            select(Registration.id).where(
+                Registration.activity_id == activity_id,
+                Registration.user_id == current_user.id,
+                Registration.status != "cancelled",
+            )
+        ) is not None
+    if (
+        access is not None
+        and access.visibility == "link"
+        and not is_creator
+        and not current_user_has_registration
+        and not has_link_access(request, activity_id)
+    ):
+        raise HTTPException(status_code=404, detail="找不到活動")
     registrations = database.scalars(
         select(Registration)
         .where(
@@ -889,8 +988,32 @@ def activity_detail(
             "waitlisted": waitlisted,
             "capacity_status": capacity_status,
             "notice": NOTICE_MESSAGES.get(notice),
+            "visibility": access.visibility if access is not None else "public",
+            "share_url": (
+                f"{str(request.base_url).rstrip('/')}/invite/{access.share_token}"
+                if access is not None and access.visibility == "link"
+                else str(request.url_for("activity_detail", activity_id=activity_id))
+            ),
         },
     )
+
+
+@app.get("/invite/{share_token}")
+def open_shared_activity(
+    share_token: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    access = database.scalar(
+        select(ActivityAccess).where(
+            ActivityAccess.share_token == share_token,
+            ActivityAccess.visibility == "link",
+        )
+    )
+    if access is None:
+        raise HTTPException(status_code=404, detail="邀請連結不存在或已失效")
+    grant_link_access(request, access.activity_id)
+    return RedirectResponse(url=f"/activities/{access.activity_id}", status_code=303)
 
 
 def require_activity_creator(
@@ -919,6 +1042,7 @@ def edit_activity_page(
     activity, current_user = require_activity_creator(activity_id, request, database)
     if activity.status != "open":
         raise HTTPException(status_code=409, detail="已取消的活動不能編輯")
+    access = get_activity_access(database, activity_id)
     return templates.TemplateResponse(
         request=request,
         name="edit_activity.html",
@@ -927,6 +1051,8 @@ def edit_activity_page(
             "activity": activity,
             "error": None,
             "current_user": current_user,
+            "visibility": access.visibility if access is not None else "public",
+            "has_invite_code": access is not None and access.invite_code_hash is not None,
         },
     )
 
@@ -943,6 +1069,8 @@ def edit_activity(
     max_people: Annotated[int, Form(ge=2, le=100)],
     fee: Annotated[int, Form(ge=0, le=100000)] = 0,
     description: Annotated[str, Form(max_length=1000)] = "",
+    visibility: Annotated[str, Form()] = "public",
+    invite_code: Annotated[str, Form(max_length=20)] = "",
     database: Session = Depends(get_db),
 ):
     current_user_id = require_session_user_id(request)
@@ -962,11 +1090,23 @@ def edit_activity(
             Registration.status == "registered",
         )
     ) or 0
+    access = get_activity_access(database, activity_id)
+    normalized_invite_code = invite_code.strip()
     error = None
     if max_people < min_people:
         error = "最高人數不能小於最低成團人數。"
     elif max_people < confirmed_count:
         error = f"目前已有 {confirmed_count} 位正式成員，最高人數不能低於此數字。"
+    elif visibility not in {"public", "link", "code"}:
+        error = "請選擇有效的活動分享方式。"
+    elif (
+        visibility == "code"
+        and not normalized_invite_code
+        and (access is None or access.invite_code_hash is None)
+    ):
+        error = "第一次改為邀請碼活動時，請設定 4～20 個字元的邀請碼。"
+    elif normalized_invite_code and not 4 <= len(normalized_invite_code) <= 20:
+        error = "邀請碼需為 4～20 個字元。"
 
     if error is not None:
         return templates.TemplateResponse(
@@ -977,6 +1117,8 @@ def edit_activity(
                 "activity": activity,
                 "error": error,
                 "current_user": current_user,
+                "visibility": visibility,
+                "has_invite_code": access is not None and access.invite_code_hash is not None,
             },
             status_code=422,
         )
@@ -989,6 +1131,35 @@ def edit_activity(
     activity.max_people = max_people
     activity.fee = fee
     activity.description = description.strip()
+    if access is None:
+        access = ActivityAccess(
+            activity_id=activity_id,
+            visibility=visibility,
+            share_token=secrets.token_urlsafe(24),
+        )
+        database.add(access)
+    else:
+        access.visibility = visibility
+    if visibility == "code":
+        if normalized_invite_code:
+            access.invite_code_hash = hash_password(normalized_invite_code)
+    else:
+        access.invite_code_hash = None
+
+    active_user_ids = database.scalars(
+        select(Registration.user_id).where(
+            Registration.activity_id == activity_id,
+            Registration.status != "cancelled",
+        )
+    ).all()
+    for participant_id in active_user_ids:
+        add_notification(
+            database,
+            user_id=participant_id,
+            activity_id=activity_id,
+            message=f"「{activity.title}」的活動內容已更新，請查看最新時間與地點。",
+            email_event="activity_changes",
+        )
     database.commit()
     return RedirectResponse(
         url=f"/activities/{activity_id}?notice=updated",
@@ -1027,6 +1198,7 @@ def cancel_activity(
             user_id=registration.user_id,
             activity_id=activity_id,
             message=f"「{activity.title}」已由建立者取消。",
+            email_event="activity_changes",
         )
 
     database.commit()
@@ -1246,6 +1418,7 @@ def save_activity_feedback(
 def register_member(
     activity_id: int,
     request: Request,
+    invite_code: Annotated[str, Form(max_length=20)] = "",
     database: Session = Depends(get_db),
 ):
     user_id = require_session_user_id(request)
@@ -1255,6 +1428,18 @@ def register_member(
         raise HTTPException(status_code=401, detail="登入狀態已失效")
     if activity.status != "open":
         raise HTTPException(status_code=409, detail="活動目前無法報名")
+    access = get_activity_access(database, activity_id)
+    if access is not None and access.visibility == "code":
+        normalized_invite_code = invite_code.strip()
+        if (
+            access.invite_code_hash is None
+            or not normalized_invite_code
+            or not verify_password(normalized_invite_code, access.invite_code_hash)
+        ):
+            return RedirectResponse(
+                url=f"/activities/{activity_id}?notice=invalid_invite_code",
+                status_code=303,
+            )
 
     existing = database.scalar(
         select(Registration).where(
@@ -1294,6 +1479,7 @@ def register_member(
             user_id=user_id,
             activity_id=activity_id,
             message=f"你已成功報名「{activity.title}」。",
+            email_event="registration",
         )
     else:
         add_notification(
@@ -1301,6 +1487,7 @@ def register_member(
             user_id=user_id,
             activity_id=activity_id,
             message=f"「{activity.title}」目前額滿，你已加入候補名單。",
+            email_event="registration",
         )
 
     if new_status == "registered" and confirmed_count < activity.min_people <= confirmed_count + 1:
@@ -1317,6 +1504,7 @@ def register_member(
                 user_id=participant_id,
                 activity_id=activity_id,
                 message=f"「{activity.title}」已達最低人數，活動成團！",
+                email_event="formed",
             )
 
     database.commit()
@@ -1385,6 +1573,7 @@ def cancel_registration(
                 user_id=promoted.user_id,
                 activity_id=activity_id,
                 message=f"「{activity.title}」有名額釋出，你已從候補轉為正式名單。",
+                email_event="promotion",
             )
 
     database.flush()
@@ -1420,7 +1609,17 @@ def cancel_registration(
 @app.get("/api/activities", response_model=list[ActivityRead])
 def list_activities(database: Session = Depends(get_db)) -> list[Activity]:
     return list(
-        database.scalars(select(Activity).order_by(Activity.starts_at.asc())).all()
+        database.scalars(
+            select(Activity)
+            .outerjoin(ActivityAccess, ActivityAccess.activity_id == Activity.id)
+            .where(
+                or_(
+                    ActivityAccess.id.is_(None),
+                    ActivityAccess.visibility == "public",
+                )
+            )
+            .order_by(Activity.starts_at.asc())
+        ).all()
     )
 
 

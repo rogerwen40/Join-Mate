@@ -9,11 +9,51 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine
-from app.models import Activity, EmailDelivery, Notification, User
+from app.models import Activity, EmailDelivery, EmailPreference, Notification, User
 
 
 MAX_EMAIL_ATTEMPTS = 5
 EMAIL_BATCH_SIZE = 25
+
+EMAIL_PREFERENCE_FIELDS = {
+    "registration": "registration",
+    "activity_changes": "activity_changes",
+    "promotion": "promotion",
+    "formed": "formed",
+    "reminder_24h": "reminder_24h",
+    "reminder_1h": "reminder_1h",
+}
+DEFAULT_EMAIL_PREFERENCES = {
+    "registration": True,
+    "activity_changes": True,
+    "promotion": True,
+    "formed": True,
+    "reminder_24h": False,
+    "reminder_1h": False,
+}
+
+
+def get_email_preferences(database: Session, user_id: int) -> EmailPreference:
+    preferences = database.scalar(
+        select(EmailPreference).where(EmailPreference.user_id == user_id)
+    )
+    if preferences is None:
+        preferences = EmailPreference(user_id=user_id, **DEFAULT_EMAIL_PREFERENCES)
+        database.add(preferences)
+        database.flush()
+    return preferences
+
+
+def email_is_enabled(database: Session, user_id: int, event_type: str | None) -> bool:
+    field = EMAIL_PREFERENCE_FIELDS.get(event_type or "")
+    if field is None:
+        return False
+    preferences = database.scalar(
+        select(EmailPreference).where(EmailPreference.user_id == user_id)
+    )
+    if preferences is None:
+        return DEFAULT_EMAIL_PREFERENCES[field]
+    return bool(getattr(preferences, field))
 
 
 def queue_notification(
@@ -22,8 +62,9 @@ def queue_notification(
     user_id: int,
     activity_id: int,
     message: str,
+    email_event: str | None = None,
 ) -> Notification:
-    """Create one in-app notification and its matching email outbox item."""
+    """Create an in-app notification and queue Email when the user opted in."""
     notification = Notification(
         user_id=user_id,
         activity_id=activity_id,
@@ -31,7 +72,8 @@ def queue_notification(
     )
     database.add(notification)
     database.flush()
-    database.add(EmailDelivery(notification_id=notification.id))
+    if email_is_enabled(database, user_id, email_event):
+        database.add(EmailDelivery(notification_id=notification.id))
     return notification
 
 

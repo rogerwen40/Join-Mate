@@ -27,6 +27,20 @@
         <article class="stat-card"><span>取消／未轉正</span><strong>{{ cancelled_count }}</strong></article>
       </section>
 
+      <section class="dashboard-section preference-panel">
+        <div class="section-heading"><h2>Email 通知設定</h2><span>站內通知仍會保留</span></div>
+        {% if request.query_params.get('email_saved') %}<div class="success-message" role="status">Email 通知設定已儲存。</div>{% endif %}
+        <form class="preference-form" action="/me/email-preferences" method="post">
+          <label><input type="checkbox" name="registration" {% if email_preferences.registration %}checked{% endif %}><span><strong>報名結果</strong><small>正式報名或進入候補時寄信</small></span></label>
+          <label><input type="checkbox" name="activity_changes" {% if email_preferences.activity_changes %}checked{% endif %}><span><strong>活動修改或取消</strong><small>時間、地點等內容有變動時寄信</small></span></label>
+          <label><input type="checkbox" name="promotion" {% if email_preferences.promotion %}checked{% endif %}><span><strong>候補轉正式</strong><small>候補取得名額時寄信</small></span></label>
+          <label><input type="checkbox" name="formed" {% if email_preferences.formed %}checked{% endif %}><span><strong>活動成團</strong><small>達到最低人數時寄信</small></span></label>
+          <label><input type="checkbox" name="reminder_24h" {% if email_preferences.reminder_24h %}checked{% endif %}><span><strong>活動前一天</strong><small>約 24 小時前寄提醒信（預設關閉）</small></span></label>
+          <label><input type="checkbox" name="reminder_1h" {% if email_preferences.reminder_1h %}checked{% endif %}><span><strong>活動前一小時</strong><small>約 1 小時前寄提醒信（預設關閉）</small></span></label>
+          <button class="submit-button" type="submit">儲存 Email 設定</button>
+        </form>
+      </section>
+
       <section class="dashboard-section">
         <div class="section-heading"><h2>即將參加</h2><span>{{ upcoming_registrations|length }} 場</span></div>
         {% if upcoming_registrations %}

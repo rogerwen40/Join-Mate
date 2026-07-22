@@ -25,6 +25,13 @@
         </div>
         <h1>{{ activity.title }}</h1>
 
+        {% if is_creator %}
+          <section class="share-panel">
+            <div><strong>{% if visibility == 'public' %}公開活動{% elif visibility == 'link' %}只限連結{% else %}邀請碼活動{% endif %}</strong><p>{% if visibility == 'public' %}所有人可在首頁找到此活動。{% elif visibility == 'link' %}只有拿到下方專屬連結的人能查看。{% else %}分享活動連結與你設定的邀請碼，參加者輸入正確代碼才能報名。{% endif %}</p></div>
+            <div class="share-controls"><input id="share-url" value="{{ share_url }}" readonly><button class="quiet-button" id="copy-share-url" type="button">複製連結</button></div>
+          </section>
+        {% endif %}
+
         <dl class="detail-list">
           <div><dt>日期與時間</dt><dd>{{ activity.starts_at.strftime('%Y/%m/%d %H:%M') }}</dd></div>
           <div><dt>地點</dt><dd>{{ activity.location }}</dd></div>
@@ -65,6 +72,7 @@
           {% elif current_user and not current_registration %}
             <form class="signup-form" action="/activities/{{ activity.id }}/registrations" method="post">
               <p>將以 <strong>{{ current_user.name }}</strong> 的身分報名。</p>
+              {% if visibility == 'code' %}<label>邀請碼<input name="invite_code" minlength="4" maxlength="20" required placeholder="請輸入活動邀請碼"></label>{% endif %}
               <button class="submit-button" type="submit">替自己報名</button>
             </form>
           {% elif current_registration %}
@@ -156,5 +164,21 @@
         {% endif %}
       </article>
     </main>
+    <script>
+      const copyButton = document.querySelector('#copy-share-url');
+      if (copyButton) {
+        copyButton.addEventListener('click', async () => {
+          const input = document.querySelector('#share-url');
+          try {
+            await navigator.clipboard.writeText(input.value);
+            copyButton.textContent = '已複製';
+          } catch (_) {
+            input.select();
+            document.execCommand('copy');
+            copyButton.textContent = '已複製';
+          }
+        });
+      }
+    </script>
   </body>
 </html>

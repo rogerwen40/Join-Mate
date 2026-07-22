@@ -200,6 +200,21 @@ textarea { resize: vertical; }
 .auth-form label { display: grid; gap: 0.45rem; font-weight: 750; }
 .auth-form .submit-button { margin-top: 0.5rem; }
 
+.form-section { display: grid; gap: 1rem; padding: 1.2rem; border: 1px solid #dce6e2; border-radius: 1rem; background: #f7faf8; }
+.form-section h2 { margin: 0; font-size: 1.1rem; }
+.form-section label { display: grid; gap: 0.5rem; }
+.share-panel { display: grid; gap: 1rem; margin: 1.5rem 0; padding: 1.1rem; border: 1px solid #bcd8cd; border-radius: 1rem; background: #f1faf6; }
+.share-panel p { margin: 0.3rem 0 0; color: #647871; }
+.share-controls { display: grid; grid-template-columns: 1fr auto; gap: 0.65rem; }
+.share-controls input { min-width: 0; background: white; }
+.preference-panel { padding: 1.25rem; border: 1px solid #dce6e2; border-radius: 1.25rem; background: rgba(255, 255, 255, 0.86); }
+.preference-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.7rem; margin-top: 1rem; }
+.preference-form label { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.9rem; border: 1px solid #dce6e2; border-radius: 0.9rem; background: #f8faf9; cursor: pointer; }
+.preference-form input { width: auto; margin-top: 0.2rem; }
+.preference-form span { display: grid; gap: 0.2rem; }
+.preference-form small { color: #71857e; line-height: 1.4; }
+.preference-form .submit-button { grid-column: 1 / -1; justify-self: start; }
+
 .notification-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
 .notification-heading h1 { font-size: clamp(2.7rem, 7vw, 4.5rem); }
 .quiet-button, .read-button { padding: 0.62rem 0.85rem; border: 1px solid #c9d8d2; border-radius: 999px; color: #36594d; background: white; font: inherit; font-weight: 750; cursor: pointer; }
@@ -234,6 +249,8 @@ textarea { resize: vertical; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .stat-card:first-child { grid-column: 1 / -1; }
   .feedback-form { grid-template-columns: 1fr; }
+  .share-controls, .preference-form { grid-template-columns: 1fr; }
+  .preference-form .submit-button { grid-column: auto; width: 100%; }
   .admin-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .admin-detail-grid { grid-template-columns: 1fr; }
   .empty-state { padding: 2rem 1.25rem; }

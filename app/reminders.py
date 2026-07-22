@@ -13,9 +13,9 @@ DEFAULT_INTERVAL_SECONDS = 30
 
 
 def _select_reminder(remaining: timedelta) -> tuple[str, str] | None:
-    if timedelta(0) < remaining <= timedelta(minutes=30):
-        return "30_minutes", "將在 30 分鐘內開始"
-    if timedelta(minutes=30) < remaining <= timedelta(hours=24):
+    if timedelta(0) < remaining <= timedelta(hours=1):
+        return "1_hour", "將在 1 小時內開始"
+    if timedelta(hours=1) < remaining <= timedelta(hours=24):
         return "24_hours", "將在 24 小時內開始"
     return None
 
@@ -65,6 +65,9 @@ def check_activity_reminders(now: datetime | None = None) -> int:
                     message=(
                         f"「{activity.title}」{reminder_text}，"
                         f"時間為 {activity.starts_at.strftime('%m/%d %H:%M')}。"
+                    ),
+                    email_event=(
+                        "reminder_1h" if reminder_type == "1_hour" else "reminder_24h"
                     ),
                 )
                 database.add(
