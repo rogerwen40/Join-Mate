@@ -28,7 +28,13 @@
         {% if is_creator %}
           <section class="share-panel">
             <div><strong>{% if visibility == 'public' %}公開活動{% else %}邀請碼活動{% endif %}</strong><p>{% if visibility == 'public' %}所有人可在首頁找到此活動。{% else %}分享活動連結與你設定的邀請碼，參加者輸入正確代碼才能報名。{% endif %}</p></div>
-            <div class="share-controls"><input id="share-url" value="{{ share_url }}" readonly><button class="quiet-button" id="copy-share-url" type="button">複製連結</button></div>
+            <div class="share-controls">
+              <textarea id="share-text" rows="7" readonly>{{ share_text }}</textarea>
+              <div class="share-actions">
+                {% if visibility == 'code' %}<label>一起附上邀請碼（不會儲存）<input id="share-invite-code" maxlength="20" placeholder="輸入後再按複製"></label>{% endif %}
+                <button class="quiet-button" id="copy-share-text" type="button">複製活動資訊</button>
+              </div>
+            </div>
           </section>
         {% endif %}
 
@@ -165,16 +171,28 @@
       </article>
     </main>
     <script>
-      const copyButton = document.querySelector('#copy-share-url');
+      const copyButton = document.querySelector('#copy-share-text');
       if (copyButton) {
         copyButton.addEventListener('click', async () => {
-          const input = document.querySelector('#share-url');
+          const input = document.querySelector('#share-text');
+          const codeInput = document.querySelector('#share-invite-code');
+          let textToCopy = input.value;
+          if (codeInput && codeInput.value.trim()) {
+            textToCopy = textToCopy.replace(
+              '🔐 私人聚會，報名時需輸入邀請碼',
+              `🔐 邀請碼：${codeInput.value.trim()}`
+            );
+          }
           try {
-            await navigator.clipboard.writeText(input.value);
+            await navigator.clipboard.writeText(textToCopy);
             copyButton.textContent = '已複製';
           } catch (_) {
-            input.select();
+            const temporary = document.createElement('textarea');
+            temporary.value = textToCopy;
+            document.body.appendChild(temporary);
+            temporary.select();
             document.execCommand('copy');
+            temporary.remove();
             copyButton.textContent = '已複製';
           }
         });

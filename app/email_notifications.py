@@ -5,11 +5,18 @@ from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine
-from app.models import Activity, EmailDelivery, EmailPreference, Notification, User
+from app.models import (
+    Activity,
+    EmailDelivery,
+    EmailPreference,
+    Notification,
+    Registration,
+    User,
+)
 
 
 MAX_EMAIL_ATTEMPTS = 5
@@ -31,6 +38,52 @@ DEFAULT_EMAIL_PREFERENCES = {
     "reminder_24h": False,
     "reminder_1h": False,
 }
+WEEKDAYS_ZH = ("一", "二", "三", "四", "五", "六", "日")
+
+
+def _email_reason(message: str) -> str:
+    reason_rules = (
+        ("成功報名", "報名成功"),
+        ("加入候補", "候補通知"),
+        ("候補轉為正式", "候補轉正"),
+        ("已達最低人數", "活動已成團"),
+        ("內容已更新", "活動內容更新"),
+        ("已由建立者取消", "活動取消"),
+        ("將在 24 小時", "活動前一天提醒"),
+        ("將在 1 小時", "活動前一小時提醒"),
+    )
+    return next((label for keyword, label in reason_rules if keyword in message), "活動通知")
+
+
+def _activity_email_details(
+    activity: Activity,
+    *,
+    confirmed_count: int,
+) -> tuple[str, str]:
+    starts_at = activity.starts_at
+    date_text = (
+        f"{starts_at.year}/{starts_at.month}/{starts_at.day}"
+        f"（{WEEKDAYS_ZH[starts_at.weekday()]}） {starts_at.strftime('%H:%M')}"
+    )
+    fee_text = f"每人 ${activity.fee}" if activity.fee else "免費"
+    people_text = f"正取 {confirmed_count}/{activity.max_people} 名"
+    if confirmed_count >= activity.max_people:
+        people_text += "，開放候補"
+    text_details = (
+        f"類型：{activity.activity_type}\n"
+        f"時間：{date_text}\n"
+        f"地點：{activity.location}\n"
+        f"費用：{fee_text}\n"
+        f"人數：{people_text}"
+    )
+    html_details = (
+        f"<strong>類型：</strong>{html.escape(activity.activity_type)}<br>"
+        f"<strong>時間：</strong>{date_text}<br>"
+        f"<strong>地點：</strong>{html.escape(activity.location)}<br>"
+        f"<strong>費用：</strong>{html.escape(fee_text)}<br>"
+        f"<strong>人數：</strong>{html.escape(people_text)}"
+    )
+    return text_details, html_details
 
 
 def get_email_preferences(database: Session, user_id: int) -> EmailPreference:
@@ -160,25 +213,35 @@ def send_pending_emails() -> int:
                 "JOINMATE_PUBLIC_URL", "https://joinmate.onrender.com"
             ).rstrip("/")
             activity_url = f"{public_url}/activities/{activity.id}"
-            subject = f"[JoinMate] {activity.title} 通知"
+            confirmed_count = database.scalar(
+                select(func.count(Registration.id)).where(
+                    Registration.activity_id == activity.id,
+                    Registration.status == "registered",
+                )
+            ) or 0
+            text_details, html_details = _activity_email_details(
+                activity,
+                confirmed_count=confirmed_count,
+            )
+            reason = _email_reason(notification.message)
+            subject = f"[JoinMate] {reason}｜{activity.title}"
             body = (
                 f"{user.name} 您好：\n\n"
                 f"{notification.message}\n\n"
+                "活動資訊\n"
                 f"活動：{activity.title}\n"
-                f"時間：{activity.starts_at.strftime('%Y/%m/%d %H:%M')}\n"
-                f"地點：{activity.location}\n"
-                f"查看活動：{activity_url}\n\n"
+                f"{text_details}\n"
+                f"報名／查看連結：{activity_url}\n\n"
                 "此信由 JoinMate 自動寄出。"
             )
             html_body = (
                 f"<p>{html.escape(user.name)} 您好：</p>"
                 f"<p>{html.escape(notification.message)}</p>"
+                "<h3 style=\"margin-bottom:8px\">活動資訊</h3>"
                 f"<p><strong>活動：</strong>{html.escape(activity.title)}<br>"
-                f"<strong>時間：</strong>"
-                f"{activity.starts_at.strftime('%Y/%m/%d %H:%M')}<br>"
-                f"<strong>地點：</strong>{html.escape(activity.location)}</p>"
+                f"{html_details}</p>"
                 f'<p><a href="{html.escape(activity_url, quote=True)}">'
-                "前往 JoinMate 查看活動</a></p>"
+                "前往 JoinMate 報名／查看活動</a></p>"
                 "<p style=\"color:#666\">此信由 JoinMate 自動寄出。</p>"
             )
 

@@ -99,6 +99,49 @@ NOTICE_MESSAGES = {
     "invalid_invite_code": "邀請碼不正確，請確認後再試一次。",
 }
 
+ACTIVITY_EMOJIS = {
+    "吃飯": "🍽️",
+    "運動": "🏸",
+    "桌遊": "🎲",
+    "討論": "💬",
+    "其他": "🎉",
+}
+WEEKDAYS_ZH = ("一", "二", "三", "四", "五", "六", "日")
+
+
+def build_activity_share_text(
+    activity: Activity,
+    *,
+    confirmed_count: int,
+    share_url: str,
+    visibility: str,
+) -> str:
+    emoji = ACTIVITY_EMOJIS.get(activity.activity_type, "🎉")
+    starts_at = activity.starts_at
+    date_text = (
+        f"{starts_at.year}/{starts_at.month}/{starts_at.day}"
+        f"（{WEEKDAYS_ZH[starts_at.weekday()]}） {starts_at.strftime('%H:%M')}"
+    )
+    fee_text = f"每人 ${activity.fee}" if activity.fee else "免費"
+    if confirmed_count >= activity.max_people:
+        people_text = f"正取 {confirmed_count}/{activity.max_people} 名 | 開放候補"
+    else:
+        remaining = activity.max_people - confirmed_count
+        people_text = (
+            f"正取 {confirmed_count}/{activity.max_people} 名 | 尚有 {remaining} 名"
+        )
+    lines = [
+        f"{emoji} {activity.title}",
+        f"📅 {date_text}",
+        f"📍 {activity.location}",
+        f"💰 {fee_text}",
+        f"👥 {people_text}",
+    ]
+    if visibility == "code":
+        lines.append("🔐 私人聚會，報名時需輸入邀請碼")
+    lines.append(f"👉 報名連結：{share_url}")
+    return "\n".join(lines)
+
 
 def add_notification(
     database: Session,
@@ -942,6 +985,7 @@ def activity_detail(
     else:
         capacity_status = "招募中"
 
+    share_url = str(request.url_for("activity_detail", activity_id=activity_id))
     return templates.TemplateResponse(
         request=request,
         name="activity_detail.html",
@@ -963,7 +1007,13 @@ def activity_detail(
             "capacity_status": capacity_status,
             "notice": NOTICE_MESSAGES.get(notice),
             "visibility": access.visibility if access is not None else "public",
-            "share_url": str(request.url_for("activity_detail", activity_id=activity_id)),
+            "share_url": share_url,
+            "share_text": build_activity_share_text(
+                activity,
+                confirmed_count=len(confirmed),
+                share_url=share_url,
+                visibility=access.visibility if access is not None else "public",
+            ),
         },
     )
 
