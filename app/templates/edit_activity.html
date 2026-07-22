@@ -45,7 +45,6 @@
             誰可以看到這個活動
             <select name="visibility" id="visibility" required>
               <option value="public" {% if visibility == 'public' %}selected{% endif %}>公開｜顯示在首頁</option>
-              <option value="link" {% if visibility == 'link' %}selected{% endif %}>只限連結｜不顯示在首頁</option>
               <option value="code" {% if visibility == 'code' %}selected{% endif %}>邀請碼｜輸入邀請碼才能報名</option>
             </select>
           </label>

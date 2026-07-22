@@ -27,7 +27,7 @@
 
         {% if is_creator %}
           <section class="share-panel">
-            <div><strong>{% if visibility == 'public' %}公開活動{% elif visibility == 'link' %}只限連結{% else %}邀請碼活動{% endif %}</strong><p>{% if visibility == 'public' %}所有人可在首頁找到此活動。{% elif visibility == 'link' %}只有拿到下方專屬連結的人能查看。{% else %}分享活動連結與你設定的邀請碼，參加者輸入正確代碼才能報名。{% endif %}</p></div>
+            <div><strong>{% if visibility == 'public' %}公開活動{% else %}邀請碼活動{% endif %}</strong><p>{% if visibility == 'public' %}所有人可在首頁找到此活動。{% else %}分享活動連結與你設定的邀請碼，參加者輸入正確代碼才能報名。{% endif %}</p></div>
             <div class="share-controls"><input id="share-url" value="{{ share_url }}" readonly><button class="quiet-button" id="copy-share-url" type="button">複製連結</button></div>
           </section>
         {% endif %}

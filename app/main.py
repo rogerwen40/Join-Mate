@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import EmailStr
 from starlette.middleware.sessions import SessionMiddleware
-from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -47,12 +47,17 @@ BASE_DIR = Path(__file__).resolve().parent
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as database:
+        database.execute(
+            update(ActivityAccess)
+            .where(ActivityAccess.visibility == "link")
+            .values(visibility="public", invite_code_hash=None)
+        )
         admin_count = database.scalar(select(func.count(AdminUser.id))) or 0
         if admin_count == 0:
             first_user = database.scalar(select(User).order_by(User.id.asc()))
             if first_user is not None:
                 database.add(AdminUser(user_id=first_user.id))
-                database.commit()
+        database.commit()
     reminder_task = asyncio.create_task(reminder_worker())
     try:
         yield
@@ -116,20 +121,6 @@ def get_activity_access(database: Session, activity_id: int) -> ActivityAccess |
     return database.scalar(
         select(ActivityAccess).where(ActivityAccess.activity_id == activity_id)
     )
-
-
-def has_link_access(request: Request, activity_id: int) -> bool:
-    activity_ids = request.session.get("link_activity_ids", [])
-    return isinstance(activity_ids, list) and activity_id in activity_ids
-
-
-def grant_link_access(request: Request, activity_id: int) -> None:
-    activity_ids = request.session.get("link_activity_ids", [])
-    if not isinstance(activity_ids, list):
-        activity_ids = []
-    request.session["link_activity_ids"] = list(
-        dict.fromkeys([*activity_ids, activity_id])
-    )[-20:]
 
 
 def require_session_user_id(request: Request) -> int:
@@ -813,7 +804,7 @@ def create_activity(
     error = None
     if max_people < min_people:
         error = "最高人數不能小於最低成團人數。"
-    elif visibility not in {"public", "link", "code"}:
+    elif visibility not in {"public", "code"}:
         error = "請選擇有效的活動分享方式。"
     elif visibility == "code" and not 4 <= len(normalized_invite_code) <= 20:
         error = "邀請碼需為 4～20 個字元。"
@@ -881,23 +872,6 @@ def activity_detail(
         and ownership is not None
         and ownership.user_id == current_user.id
     )
-    current_user_has_registration = False
-    if current_user is not None:
-        current_user_has_registration = database.scalar(
-            select(Registration.id).where(
-                Registration.activity_id == activity_id,
-                Registration.user_id == current_user.id,
-                Registration.status != "cancelled",
-            )
-        ) is not None
-    if (
-        access is not None
-        and access.visibility == "link"
-        and not is_creator
-        and not current_user_has_registration
-        and not has_link_access(request, activity_id)
-    ):
-        raise HTTPException(status_code=404, detail="找不到活動")
     registrations = database.scalars(
         select(Registration)
         .where(
@@ -989,31 +963,9 @@ def activity_detail(
             "capacity_status": capacity_status,
             "notice": NOTICE_MESSAGES.get(notice),
             "visibility": access.visibility if access is not None else "public",
-            "share_url": (
-                f"{str(request.base_url).rstrip('/')}/invite/{access.share_token}"
-                if access is not None and access.visibility == "link"
-                else str(request.url_for("activity_detail", activity_id=activity_id))
-            ),
+            "share_url": str(request.url_for("activity_detail", activity_id=activity_id)),
         },
     )
-
-
-@app.get("/invite/{share_token}")
-def open_shared_activity(
-    share_token: str,
-    request: Request,
-    database: Session = Depends(get_db),
-):
-    access = database.scalar(
-        select(ActivityAccess).where(
-            ActivityAccess.share_token == share_token,
-            ActivityAccess.visibility == "link",
-        )
-    )
-    if access is None:
-        raise HTTPException(status_code=404, detail="邀請連結不存在或已失效")
-    grant_link_access(request, access.activity_id)
-    return RedirectResponse(url=f"/activities/{access.activity_id}", status_code=303)
 
 
 def require_activity_creator(
@@ -1097,7 +1049,7 @@ def edit_activity(
         error = "最高人數不能小於最低成團人數。"
     elif max_people < confirmed_count:
         error = f"目前已有 {confirmed_count} 位正式成員，最高人數不能低於此數字。"
-    elif visibility not in {"public", "link", "code"}:
+    elif visibility not in {"public", "code"}:
         error = "請選擇有效的活動分享方式。"
     elif (
         visibility == "code"

@@ -149,7 +149,7 @@ class ActivityAccess(Base):
     __tablename__ = "activity_access"
     __table_args__ = (
         CheckConstraint(
-            "visibility IN ('public', 'link', 'code')",
+            "visibility IN ('public', 'code')",
             name="ck_activity_access_visibility",
         ),
     )
