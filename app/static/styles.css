@@ -77,6 +77,8 @@ dd { margin: 0; font-weight: 650; }
 .activity-filters label { display: grid; gap: 0.4rem; min-width: 0; }
 .activity-filters label > span { color: #657a73; font-size: 0.78rem; font-weight: 800; }
 .activity-filters input, .activity-filters select { min-width: 0; padding: 0.72rem 0.78rem; }
+.checkbox-field > span { display: grid; gap: 0.15rem; }
+.checkbox-field small { color: #80918b; font-size: 0.7rem; font-weight: 600; line-height: 1.3; }
 .checkbox-field { display: flex !important; flex-direction: row; align-items: center; align-self: end; min-height: 2.8rem; font-size: 0.88rem; font-weight: 750; }
 .checkbox-field input { width: auto; }
 .filter-actions { display: flex; gap: 0.8rem; align-items: center; grid-column: 1 / -1; }

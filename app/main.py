@@ -2,7 +2,7 @@ import asyncio
 import os
 import secrets
 from contextlib import asynccontextmanager, suppress
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -210,7 +210,7 @@ def home(
     request: Request,
     q: str | None = None,
     activity_type: str | None = None,
-    activity_date: date | None = None,
+    activity_date: str | None = None,
     location: str | None = None,
     status_filter: str = "open",
     available_only: bool = False,
@@ -253,8 +253,14 @@ def home(
         )
     if activity_type:
         statement = statement.where(Activity.activity_type == activity_type)
+    parsed_activity_date = None
     if activity_date:
-        day_start = datetime.combine(activity_date, time.min)
+        try:
+            parsed_activity_date = datetime.strptime(activity_date, "%Y-%m-%d").date()
+        except ValueError:
+            parsed_activity_date = None
+    if parsed_activity_date:
+        day_start = datetime.combine(parsed_activity_date, time.min)
         day_end = day_start + timedelta(days=1)
         statement = statement.where(
             Activity.starts_at >= day_start,
@@ -335,7 +341,9 @@ def home(
             "filters": {
                 "q": normalized_query or "",
                 "activity_type": activity_type or "",
-                "activity_date": activity_date.isoformat() if activity_date else "",
+                "activity_date": (
+                    parsed_activity_date.isoformat() if parsed_activity_date else ""
+                ),
                 "location": normalized_location or "",
                 "status_filter": status_filter,
                 "available_only": available_only,
