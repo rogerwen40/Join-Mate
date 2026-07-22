@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 
 from app.database import SessionLocal
-from app.models import Activity, Notification, Registration, ReminderDelivery
+from app.email_notifications import queue_notification, send_pending_emails
+from app.models import Activity, Registration, ReminderDelivery
 
 
 DEFAULT_INTERVAL_SECONDS = 30
@@ -57,15 +58,14 @@ def check_activity_reminders(now: datetime | None = None) -> int:
                 if already_delivered is not None:
                     continue
 
-                database.add(
-                    Notification(
-                        user_id=user_id,
-                        activity_id=activity.id,
-                        message=(
-                            f"「{activity.title}」{reminder_text}，"
-                            f"時間為 {activity.starts_at.strftime('%m/%d %H:%M')}。"
-                        ),
-                    )
+                queue_notification(
+                    database,
+                    user_id=user_id,
+                    activity_id=activity.id,
+                    message=(
+                        f"「{activity.title}」{reminder_text}，"
+                        f"時間為 {activity.starts_at.strftime('%m/%d %H:%M')}。"
+                    ),
                 )
                 database.add(
                     ReminderDelivery(
@@ -93,4 +93,5 @@ async def reminder_worker() -> None:
 
     while True:
         await asyncio.to_thread(check_activity_reminders)
+        await asyncio.to_thread(send_pending_emails)
         await asyncio.sleep(interval_seconds)

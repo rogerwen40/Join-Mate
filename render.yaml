@@ -10,6 +10,12 @@ services:
     envVars:
       - key: JOINMATE_DATABASE_URL
         sync: false
+      - key: JOINMATE_EMAIL_WEBHOOK_URL
+        sync: false
+      - key: JOINMATE_EMAIL_SECRET
+        sync: false
+      - key: JOINMATE_PUBLIC_URL
+        value: "https://joinmate.onrender.com"
       - key: JOINMATE_SESSION_SECRET
         generateValue: true
       - key: JOINMATE_HTTPS_ONLY

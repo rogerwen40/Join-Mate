@@ -1,5 +1,6 @@
 import asyncio
 import os
+import secrets
 from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import Base, SessionLocal, engine, get_db
 from app.auth import get_current_user, hash_password, require_current_user, verify_password
+from app.email_notifications import queue_notification, send_pending_emails
 from app.models import (
     Activity,
     ActivityFeedback,
@@ -29,7 +31,7 @@ from app.models import (
     User,
     UserCredential,
 )
-from app.reminders import reminder_worker
+from app.reminders import check_activity_reminders, reminder_worker
 from app.schemas import ActivityRead
 
 
@@ -94,12 +96,11 @@ def add_notification(
     activity_id: int,
     message: str,
 ) -> None:
-    database.add(
-        Notification(
-            user_id=user_id,
-            activity_id=activity_id,
-            message=message,
-        )
+    queue_notification(
+        database,
+        user_id=user_id,
+        activity_id=activity_id,
+        message=message,
     )
 
 
@@ -1426,3 +1427,28 @@ def list_activities(database: Session = Depends(get_db)) -> list[Activity]:
 @app.get("/api/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "JoinMate"}
+
+
+@app.post("/api/reminders/run")
+async def run_scheduled_reminders(request: Request) -> dict[str, int | str]:
+    expected_secret = os.getenv("JOINMATE_EMAIL_SECRET", "").strip()
+    if not expected_secret:
+        raise HTTPException(status_code=503, detail="Email reminders are not configured")
+
+    try:
+        payload = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON object")
+    provided_secret = str(payload.get("secret", ""))
+    if not secrets.compare_digest(provided_secret, expected_secret):
+        raise HTTPException(status_code=403, detail="Invalid reminder secret")
+
+    reminders_created = await asyncio.to_thread(check_activity_reminders)
+    emails_sent = await asyncio.to_thread(send_pending_emails)
+    return {
+        "status": "ok",
+        "reminders_created": reminders_created,
+        "emails_sent": emails_sent,
+    }

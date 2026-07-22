@@ -97,6 +97,23 @@ class Notification(Base):
     activity: Mapped[Activity] = relationship(back_populates="notifications")
 
 
+class EmailDelivery(Base):
+    __tablename__ = "email_deliveries"
+    __table_args__ = (
+        UniqueConstraint("notification_id", name="uq_email_delivery_notification"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    notification_id: Mapped[int] = mapped_column(
+        ForeignKey("notifications.id", ondelete="CASCADE"),
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class ReminderDelivery(Base):
     __tablename__ = "reminder_deliveries"
     __table_args__ = (

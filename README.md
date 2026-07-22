@@ -66,6 +66,19 @@ GitHub repository 並套用 `render.yaml`。首次建立時，將 Neon 的連線
 本機執行仍使用 `joinmate.db`；Render 則由 `JOINMATE_DATABASE_URL`
 切換至 Neon PostgreSQL，因此本機與雲端資料彼此獨立。
 
+## Gmail Email 通知
+
+`google_apps_script/Code.gs` 是以網站管理者 Gmail 寄信的 Apps Script
+橋接程式。部署為 Web App 後，在 Render 設定：
+
+- `JOINMATE_EMAIL_WEBHOOK_URL`：Apps Script 的 `/exec` 網址
+- `JOINMATE_EMAIL_SECRET`：執行 `setupJoinMate` 產生的共用密鑰
+- `JOINMATE_PUBLIC_URL`：公開的 JoinMate 網址
+
+`setupJoinMate` 也會建立每 5 分鐘執行一次的排程，用 HTTPS 喚醒免費
+Render 服務並檢查活動提醒。Email 使用資料庫 outbox，寄送成功前最多
+重試五次；站內通知不受 Email 寄送失敗影響。
+
 本機活動資料會儲存在專案根目錄的 `joinmate.db`。這個檔案已列入
 `.gitignore`，不會被提交到版本控制。
 
