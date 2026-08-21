@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import secrets
 import time as monotonic_time
@@ -14,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import EmailStr
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import delete, func, or_, select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import Base, SessionLocal, engine, get_db
@@ -43,6 +44,7 @@ from app.schemas import ActivityRead
 
 
 BASE_DIR = Path(__file__).resolve().parent
+logger = logging.getLogger(__name__)
 REMINDER_API_MIN_INTERVAL_SECONDS = 25 * 60
 _reminder_api_lock = asyncio.Lock()
 _last_reminder_api_run = 0.0
@@ -50,19 +52,25 @@ _last_reminder_api_run = 0.0
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as database:
-        database.execute(
-            update(ActivityAccess)
-            .where(ActivityAccess.visibility == "link")
-            .values(visibility="public", invite_code_hash=None)
+    try:
+        Base.metadata.create_all(bind=engine)
+        with SessionLocal() as database:
+            database.execute(
+                update(ActivityAccess)
+                .where(ActivityAccess.visibility == "link")
+                .values(visibility="public", invite_code_hash=None)
+            )
+            admin_count = database.scalar(select(func.count(AdminUser.id))) or 0
+            if admin_count == 0:
+                first_user = database.scalar(select(User).order_by(User.id.asc()))
+                if first_user is not None:
+                    database.add(AdminUser(user_id=first_user.id))
+            database.commit()
+    except OperationalError:
+        logger.exception(
+            "Database unavailable during startup; starting the web service in "
+            "degraded mode"
         )
-        admin_count = database.scalar(select(func.count(AdminUser.id))) or 0
-        if admin_count == 0:
-            first_user = database.scalar(select(User).order_by(User.id.asc()))
-            if first_user is not None:
-                database.add(AdminUser(user_id=first_user.id))
-        database.commit()
     reminder_task = None
     if os.getenv("JOINMATE_ENABLE_REMINDER_WORKER", "0") == "1":
         reminder_task = asyncio.create_task(reminder_worker())
