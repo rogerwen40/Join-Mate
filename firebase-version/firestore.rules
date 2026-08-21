@@ -1,0 +1,91 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(activityId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/activities/$(activityId)).data.creatorId == request.auth.uid;
+    }
+
+    function hasPrivateAccess(activityId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/activityAccess/$(activityId));
+    }
+
+    function canReadActivity(activityId) {
+      return get(/databases/$(database)/documents/activities/$(activityId)).data.visibility == 'public'
+        || isOwner(activityId)
+        || hasPrivateAccess(activityId);
+    }
+
+    match /users/{userId} {
+      allow create, read, update: if signedIn() && request.auth.uid == userId;
+      allow delete: if false;
+
+      match /createdActivities/{activityId} {
+        allow read, create, update, delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /registrations/{activityId} {
+        allow read, create, update, delete: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /activityAccess/{activityId} {
+        allow read, delete: if signedIn() && request.auth.uid == userId;
+        allow create, update: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.inviteCode is string
+          && getAfter(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.activityId == activityId;
+      }
+    }
+
+    match /activities/{activityId} {
+      allow read: if resource.data.visibility == 'public'
+        || (signedIn() && resource.data.creatorId == request.auth.uid)
+        || hasPrivateAccess(activityId);
+
+      allow create: if signedIn()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.visibility in ['public', 'invite']
+        && request.resource.data.status == 'open'
+        && request.resource.data.minPeople is int
+        && request.resource.data.maxPeople is int
+        && request.resource.data.minPeople >= 2
+        && request.resource.data.maxPeople >= request.resource.data.minPeople
+        && request.resource.data.maxPeople <= 100;
+
+      allow update: if signedIn()
+        && resource.data.creatorId == request.auth.uid
+        && request.resource.data.creatorId == resource.data.creatorId;
+      allow delete: if signedIn() && resource.data.creatorId == request.auth.uid;
+
+      match /registrations/{registrationId} {
+        allow read: if signedIn() && canReadActivity(activityId);
+        allow create: if signedIn()
+          && canReadActivity(activityId)
+          && registrationId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.status in ['registered', 'waitlisted'];
+        allow update: if isOwner(activityId)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.status in ['registered', 'waitlisted'];
+        allow delete: if signedIn()
+          && (registrationId == request.auth.uid || isOwner(activityId));
+      }
+    }
+
+    match /invites/{inviteCode} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.creatorId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/activities/$(request.resource.data.activityId)).data.creatorId == request.auth.uid;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.creatorId == request.auth.uid;
+    }
+  }
+}

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#2f7d62">
+    <title>JoinMate Fire</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <button class="brand link-button" data-route="home">JoinMate <span>Fire</span></button>
+      <nav class="topnav">
+        <button class="nav-link" data-route="home">探索活動</button>
+        <button class="nav-link signed-in-only" data-route="mine" hidden>我的活動</button>
+        <button class="nav-link signed-in-only" data-action="open-invite" hidden>輸入邀請碼</button>
+        <button class="primary-button signed-in-only" data-route="new" hidden>＋ 建立活動</button>
+        <button id="login-button" class="primary-button">使用 Google 登入</button>
+        <div id="user-menu" class="user-menu" hidden>
+          <img id="user-photo" alt="使用者頭像">
+          <span id="user-name"></span>
+          <button id="logout-button" class="nav-link">登出</button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="shell">
+      <div id="setup-warning" class="warning" hidden>
+        Firebase 尚未設定。請先依照 README 填入 <code>firebase-config.js</code>。
+      </div>
+      <div id="message" class="message" role="status" hidden></div>
+
+      <section id="home-view" class="view">
+        <div class="hero">
+          <p class="eyebrow">ACTIVITY HUB</p>
+          <h1>讓興趣 Meet 夥伴</h1>
+          <p>揪球、聚餐、桌遊或任何想一起完成的活動。</p>
+        </div>
+
+        <form id="filters" class="filters">
+          <label><span>搜尋</span><input id="filter-query" type="search" placeholder="活動、地點或類型"></label>
+          <label><span>活動類型</span><select id="filter-type"><option value="">全部類型</option></select></label>
+          <label><span>日期</span><input id="filter-date" type="date"></label>
+          <label class="check-label"><input id="filter-available" type="checkbox"><span>只看可報名</span></label>
+          <button class="secondary-button" type="reset">清除篩選</button>
+        </form>
+
+        <div class="section-heading">
+          <div><h2>公開活動</h2><p id="activity-count">載入中…</p></div>
+          <button id="refresh-button" class="secondary-button">重新整理</button>
+        </div>
+        <div id="activity-grid" class="activity-grid"></div>
+        <div id="empty-state" class="empty-state" hidden>
+          <strong>目前沒有符合條件的活動</strong>
+          <p>可以清除篩選，或登入後建立第一個活動。</p>
+        </div>
+      </section>
+
+      <section id="new-view" class="view" hidden>
+        <div class="compact-heading">
+          <button class="back-button" data-route="home">← 返回活動列表</button>
+          <p class="eyebrow">NEW ACTIVITY</p>
+          <h1>建立活動</h1>
+        </div>
+        <form id="activity-form" class="card form-grid">
+          <label class="full"><span>活動名稱</span><input name="title" minlength="2" maxlength="100" required placeholder="例如：週五下班羽球團"></label>
+          <label><span>活動類型</span><input name="activityType" maxlength="40" required placeholder="羽球、聚餐、桌遊…"></label>
+          <label><span>地點</span><input name="location" maxlength="150" required></label>
+          <label><span>開始時間</span><input name="startsAt" type="datetime-local" required></label>
+          <label><span>結束時間</span><input name="endsAt" type="datetime-local" required></label>
+          <label><span>最低成團人數</span><input name="minPeople" type="number" min="2" max="100" value="2" required></label>
+          <label><span>正取上限</span><input name="maxPeople" type="number" min="2" max="100" value="10" required></label>
+          <label><span>費用</span><input name="fee" type="number" min="0" max="100000" value="0" required></label>
+          <fieldset class="full visibility-options">
+            <legend>活動隱私</legend>
+            <label><input type="radio" name="visibility" value="public" checked><span><strong>公開</strong><small>所有人都能在首頁看到</small></span></label>
+            <label><input type="radio" name="visibility" value="invite"><span><strong>邀請碼</strong><small>輸入邀請碼後才能看到與報名</small></span></label>
+          </fieldset>
+          <label class="full"><span>活動說明</span><textarea name="description" maxlength="1000" rows="5" placeholder="集合方式、攜帶物品或其他注意事項"></textarea></label>
+          <button id="create-button" class="submit-button full" type="submit">建立活動</button>
+        </form>
+      </section>
+
+      <section id="detail-view" class="view" hidden>
+        <button class="back-button" data-route="home">← 返回活動列表</button>
+        <article id="activity-detail" class="card detail-card"></article>
+      </section>
+
+      <section id="mine-view" class="view" hidden>
+        <div class="compact-heading">
+          <button class="back-button" data-route="home">← 返回活動列表</button>
+          <p class="eyebrow">MY ACTIVITIES</p>
+          <h1>我的活動</h1>
+        </div>
+        <div id="mine-grid" class="activity-grid"></div>
+        <div id="mine-empty" class="empty-state" hidden><strong>還沒有活動紀錄</strong></div>
+      </section>
+    </main>
+
+    <dialog id="invite-dialog">
+      <form id="invite-form" method="dialog" class="dialog-card">
+        <button type="button" class="dialog-close" data-action="close-invite" aria-label="關閉">×</button>
+        <p class="eyebrow">PRIVATE ACTIVITY</p>
+        <h2>輸入邀請碼</h2>
+        <p>邀請碼不分大小寫。</p>
+        <input id="invite-code" maxlength="12" autocomplete="off" required placeholder="例如：A7K9PX2Q">
+        <button class="submit-button" type="submit">開啟活動</button>
+      </form>
+    </dialog>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
