@@ -20,7 +20,7 @@ import {
   where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+import { firebaseConfig } from "./firebase-config.js?v=2";
 
 const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("PASTE_");
 const setupWarning = document.querySelector("#setup-warning");
