@@ -7,6 +7,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.firebase/
+firebase-debug.log
 
 # Local data and secrets
 *.db
