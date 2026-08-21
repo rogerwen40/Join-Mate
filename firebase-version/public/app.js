@@ -363,6 +363,10 @@ async function openActivity(activityId) {
       currentRegistrations = registrationSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
     }
     renderActivityDetail();
+    if (canEditActivity(currentActivity)) {
+      void sendFirebaseMail("firebase_sync_reminders", currentActivity.id)
+        .catch((error) => console.error("Reminder sync failed", error));
+    }
     showView("detail");
   } catch (error) {
     showMessage(friendlyError(error), "error");

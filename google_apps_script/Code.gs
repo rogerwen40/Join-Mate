@@ -2,6 +2,7 @@ const JOINMATE_REMINDER_URL = 'https://joinmate.onrender.com/api/reminders/run';
 const FIREBASE_PROJECT_ID = 'joinmate-fire';
 const FIREBASE_API_KEY = 'AIzaSyDr-VO4h77b10QdP94V0TQg5O5LqHqG0_g';
 const FIREBASE_TIME_ZONE = 'Asia/Taipei';
+const FIREBASE_REMINDER_PREFIX = 'JM_FIRE_REMINDER_';
 
 function jsonResponse(value) {
   return ContentService.createTextOutput(JSON.stringify(value))
@@ -25,9 +26,11 @@ function setupJoinMate() {
 
 function setupJoinMateFirebase() {
   ScriptApp.getProjectTriggers()
-    .filter((trigger) => trigger.getHandlerFunction() === 'wakeJoinMate')
+    .filter((trigger) => ['wakeJoinMate', 'runFirebaseReminders']
+      .indexOf(trigger.getHandlerFunction()) !== -1)
     .forEach((trigger) => ScriptApp.deleteTrigger(trigger));
-  console.log('JoinMate Firebase Mailer 設定完成。');
+  ScriptApp.newTrigger('runFirebaseReminders').timeBased().everyMinutes(15).create();
+  console.log('JoinMate Firebase Mailer 設定完成，每 15 分鐘檢查活動提醒。');
 }
 
 function doGet() {
@@ -78,6 +81,9 @@ function handleFirebaseMail(payload) {
   if (payload.action === 'firebase_registration_cancelled') {
     return sendFirebaseRegistrationCancelledEmail(user, activityId, activity);
   }
+  if (payload.action === 'firebase_sync_reminders') {
+    return syncFirebaseReminders(activityId, activity, idToken);
+  }
   if (payload.action === 'firebase_activity_changed') {
     return sendFirebaseActivityChangedEmails(user, activityId, activity, idToken);
   }
@@ -111,6 +117,7 @@ function sendFirebaseRegistrationEmail(user, activityId, activity, idToken) {
   if (!registration || registration.userId !== user.localId) {
     return jsonResponse({ok: false, error: 'Registration not found'});
   }
+  saveReminderRegistration(activityId, activity, registration);
   const cacheKey = 'jm-reg-' + user.localId + '-' + activityId;
   const cache = CacheService.getScriptCache();
   if (cache.get(cacheKey)) return jsonResponse({ok: true, skipped: 'duplicate'});
@@ -132,6 +139,7 @@ function sendFirebaseRegistrationEmail(user, activityId, activity, idToken) {
 }
 
 function sendFirebaseRegistrationCancelledEmail(user, activityId, activity) {
+  deleteReminderRegistration(activityId, user.localId);
   const cacheKey = 'jm-reg-cancel-' + user.localId + '-' + activityId;
   const cache = CacheService.getScriptCache();
   if (cache.get(cacheKey)) return jsonResponse({ok: true, skipped: 'duplicate'});
@@ -163,6 +171,7 @@ function sendFirebaseActivityChangedEmails(user, activityId, activity, idToken) 
   const registrations = listFirestoreDocuments(
     'activities/' + activityId + '/registrations', idToken
   );
+  syncReminderRegistrations(activityId, activity, registrations);
   const recipients = {};
   registrations.forEach((registration) => {
     if (registration.email) recipients[String(registration.email).toLowerCase()] = registration;
@@ -185,6 +194,141 @@ function sendFirebaseActivityChangedEmails(user, activityId, activity, idToken) 
   });
   cache.put(cacheKey, '1', 30);
   return jsonResponse({ok: true, sent: sent});
+}
+
+function syncFirebaseReminders(activityId, activity, idToken) {
+  const registrations = listFirestoreDocuments(
+    'activities/' + activityId + '/registrations', idToken
+  );
+  syncReminderRegistrations(activityId, activity, registrations);
+  return jsonResponse({ok: true, synced: registrations.length});
+}
+
+function reminderPropertyKey(activityId, userId) {
+  return FIREBASE_REMINDER_PREFIX + validateDocumentId(activityId) + '_' +
+    validateDocumentId(userId);
+}
+
+function saveReminderRegistration(activityId, activity, registration) {
+  if (!registration || !registration.userId || !registration.email) return;
+  const key = reminderPropertyKey(activityId, registration.userId);
+  if (!key || key.endsWith('_')) return;
+  const properties = PropertiesService.getScriptProperties();
+  const previousText = properties.getProperty(key);
+  let previous = {};
+  try {
+    previous = previousText ? JSON.parse(previousText) : {};
+  } catch (error) {
+    previous = {};
+  }
+  const sameStart = String(previous.startsAt || '') === String(activity.startsAt || '');
+  properties.setProperty(key, JSON.stringify({
+    activityId: activityId,
+    userId: registration.userId,
+    email: registration.email,
+    displayName: registration.displayName || registration.email,
+    registrationStatus: registration.status || 'registered',
+    title: activity.title || '活動',
+    location: activity.location || '未設定',
+    startsAt: activity.startsAt || '',
+    endsAt: activity.endsAt || '',
+    fee: Number(activity.fee || 0),
+    activityStatus: activity.status || 'open',
+    daySent: sameStart && Boolean(previous.daySent),
+    hourSent: sameStart && Boolean(previous.hourSent),
+  }));
+}
+
+function deleteReminderRegistration(activityId, userId) {
+  const key = reminderPropertyKey(activityId, userId);
+  if (key && !key.endsWith('_')) {
+    PropertiesService.getScriptProperties().deleteProperty(key);
+  }
+}
+
+function syncReminderRegistrations(activityId, activity, registrations) {
+  const properties = PropertiesService.getScriptProperties();
+  const activityPrefix = FIREBASE_REMINDER_PREFIX + validateDocumentId(activityId) + '_';
+  if (activity.status === 'cancelled') {
+    Object.keys(properties.getProperties())
+      .filter((key) => key.indexOf(activityPrefix) === 0)
+      .forEach((key) => properties.deleteProperty(key));
+    return;
+  }
+  const activeKeys = {};
+  registrations.forEach((registration) => {
+    const key = reminderPropertyKey(activityId, registration.userId);
+    activeKeys[key] = true;
+    saveReminderRegistration(activityId, activity, registration);
+  });
+  Object.keys(properties.getProperties())
+    .filter((key) => key.indexOf(activityPrefix) === 0 && !activeKeys[key])
+    .forEach((key) => properties.deleteProperty(key));
+}
+
+function runFirebaseReminders() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return;
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const all = properties.getProperties();
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    const oneDay = 24 * oneHour;
+    Object.keys(all)
+      .filter((key) => key.indexOf(FIREBASE_REMINDER_PREFIX) === 0)
+      .forEach((key) => {
+        let reminder;
+        try {
+          reminder = JSON.parse(all[key]);
+        } catch (error) {
+          properties.deleteProperty(key);
+          return;
+        }
+        const startTime = new Date(reminder.startsAt).getTime();
+        const remaining = startTime - now;
+        if (!Number.isFinite(startTime) || remaining <= 0 || reminder.activityStatus === 'cancelled') {
+          properties.deleteProperty(key);
+          return;
+        }
+        if (!reminder.daySent && remaining <= oneDay && remaining > oneHour) {
+          sendScheduledReminder(reminder, 'day');
+          reminder.daySent = true;
+          properties.setProperty(key, JSON.stringify(reminder));
+        }
+        if (!reminder.hourSent && remaining <= oneHour && remaining > 0) {
+          sendScheduledReminder(reminder, 'hour');
+          reminder.hourSent = true;
+          properties.setProperty(key, JSON.stringify(reminder));
+        }
+      });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sendScheduledReminder(reminder, kind) {
+  if (MailApp.getRemainingDailyQuota() < 1) throw new Error('Gmail 每日寄信額度已用完');
+  const label = kind === 'day' ? '活動前一天提醒' : '活動前一小時提醒';
+  const activity = {
+    title: reminder.title,
+    location: reminder.location,
+    startsAt: reminder.startsAt,
+    endsAt: reminder.endsAt,
+    fee: reminder.fee,
+  };
+  const details = activityDetails(activity, reminder.activityId);
+  const body = (reminder.displayName || reminder.email) + ' 您好：\n\n' +
+    label + '：你報名的「' + reminder.title + '」即將開始。\n\n' + details.text;
+  const htmlBody = '<p>' + escapeHtml(reminder.displayName || reminder.email) + ' 您好：</p>' +
+    '<p><strong>' + label + '</strong>：你報名的「<strong>' +
+    escapeHtml(reminder.title) + '</strong>」即將開始。</p>' + details.html;
+  sendJoinMateEmail(
+    reminder.email,
+    '[JoinMate] ' + label + '｜' + reminder.title,
+    body,
+    htmlBody
+  );
 }
 
 function getFirestoreDocument(path, idToken) {
