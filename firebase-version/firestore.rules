@@ -16,6 +16,14 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(request.auth.uid)/activityAccess/$(activityId));
     }
 
+    function isActivityEditor(data) {
+      return signedIn()
+        && (data.creatorId == request.auth.uid
+          || (data.editorEmails is list
+            && request.auth.token.email != null
+            && request.auth.token.email in data.editorEmails));
+    }
+
     function canReadActivity(activityId) {
       return get(/databases/$(database)/documents/activities/$(activityId)).data.visibility == 'public'
         || isOwner(activityId)
@@ -45,11 +53,12 @@ service cloud.firestore {
 
     match /activities/{activityId} {
       allow read: if resource.data.visibility == 'public'
-        || (signedIn() && resource.data.creatorId == request.auth.uid)
+        || isActivityEditor(resource.data)
         || hasPrivateAccess(activityId);
 
       allow create: if signedIn()
         && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.editorEmails is list
         && request.resource.data.visibility in ['public', 'invite']
         && request.resource.data.status == 'open'
         && request.resource.data.minPeople is int
@@ -59,8 +68,17 @@ service cloud.firestore {
         && request.resource.data.maxPeople <= 100;
 
       allow update: if signedIn()
-        && resource.data.creatorId == request.auth.uid
-        && request.resource.data.creatorId == resource.data.creatorId;
+        && request.resource.data.creatorId == resource.data.creatorId
+        && (
+          resource.data.creatorId == request.auth.uid
+          || (
+            isActivityEditor(resource.data)
+            && request.resource.data.editorEmails == resource.data.editorEmails
+            && request.resource.data.visibility == resource.data.visibility
+            && request.resource.data.inviteCode == resource.data.inviteCode
+            && request.resource.data.status == resource.data.status
+          )
+        );
       allow delete: if signedIn() && resource.data.creatorId == request.auth.uid;
 
       match /registrations/{registrationId} {

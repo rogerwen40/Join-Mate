@@ -20,7 +20,8 @@ import {
   where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=2";
+import { firebaseConfig } from "./firebase-config.js?v=3";
+import { joinMateMailerUrl } from "./mailer-config.js?v=2";
 
 const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("PASTE_");
 const setupWarning = document.querySelector("#setup-warning");
@@ -76,6 +77,18 @@ function requireUser() {
   if (currentUser) return true;
   showMessage("請先使用 Google 帳號登入。", "error");
   return false;
+}
+
+async function sendFirebaseMail(action, activityId) {
+  if (!joinMateMailerUrl || !currentUser) return false;
+  const idToken = await currentUser.getIdToken();
+  await fetch(joinMateMailerUrl, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action, activityId, idToken })
+  });
+  return true;
 }
 
 async function handleAuthState(user) {
@@ -135,6 +148,7 @@ document.addEventListener("click", (event) => {
   if (action === "register") registerForCurrentActivity();
   if (action === "cancel-registration") cancelCurrentRegistration();
   if (action === "cancel-activity") cancelCurrentActivity();
+  if (action === "edit-activity") navigate(`edit/${currentActivity.id}`);
   if (action === "copy-share") copyShareText();
   if (action === "line-share") shareToLine();
 });
@@ -146,6 +160,11 @@ async function routeFromHash() {
   if (route.startsWith("activity/")) {
     const activityId = route.slice("activity/".length);
     await openActivity(activityId);
+    return;
+  }
+  if (route.startsWith("edit/")) {
+    const activityId = route.slice("edit/".length);
+    await openEditActivity(activityId);
     return;
   }
   if (route === "new") {
@@ -275,6 +294,7 @@ document.querySelector("#activity-form").addEventListener("submit", async (event
       inviteCode,
       creatorId: currentUser.uid,
       creatorName: currentUser.displayName || currentUser.email,
+      editorEmails: [],
       status: "open",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -357,6 +377,7 @@ function renderActivityDetail() {
   const waitlisted = currentRegistrations.filter((item) => item.status === "waitlisted");
   const mine = currentUser ? currentRegistrations.find((item) => item.userId === currentUser.uid) : null;
   const isOwner = currentUser?.uid === activity.creatorId;
+  const isEditor = canEditActivity(activity);
   const canRegister = activity.status === "open" && startsAt > new Date();
   const statusText = activity.status === "cancelled"
     ? "活動已取消"
@@ -379,11 +400,13 @@ function renderActivityDetail() {
       <div><small>建立者</small><strong>${escapeHtml(activity.creatorName || "JoinMate 成員")}</strong></div>
       <div><small>隱私</small><strong>${activity.visibility === "invite" ? "邀請碼活動" : "公開活動"}</strong></div>
     </div>
+    ${activity.editorEmails?.length ? `<div class="invite-box"><strong>共同管理者</strong><br>${activity.editorEmails.map(escapeHtml).join("、")}</div>` : ""}
     <div class="description">${escapeHtml(activity.description || "沒有其他活動說明。")}</div>
     <div class="action-row">
       ${!currentUser ? '<button class="primary-button" id="detail-login">登入後報名</button>' : ""}
       ${currentUser && !mine && !isOwner && canRegister ? '<button class="primary-button" data-action="register">我要報名</button>' : ""}
       ${mine ? `<button class="danger-button" data-action="cancel-registration">取消${mine.status === "registered" ? "報名" : "候補"}</button>` : ""}
+      ${isEditor ? '<button class="primary-button" data-action="edit-activity">編輯活動</button>' : ""}
       ${isOwner && activity.status === "open" ? '<button class="danger-button" data-action="cancel-activity">取消整個活動</button>' : ""}
       <button class="secondary-button" data-action="copy-share">複製分享內容</button>
       <button class="secondary-button" data-action="line-share">LINE 分享</button>
@@ -397,6 +420,89 @@ function renderActivityDetail() {
   const detailLogin = document.querySelector("#detail-login");
   if (detailLogin) detailLogin.addEventListener("click", () => loginButton.click());
 }
+
+function canEditActivity(activity) {
+  if (!currentUser || !activity) return false;
+  const email = (currentUser.email || "").toLowerCase();
+  return activity.creatorId === currentUser.uid
+    || (activity.editorEmails || []).map((item) => String(item).toLowerCase()).includes(email);
+}
+
+async function openEditActivity(activityId) {
+  if (!requireUser()) return navigate("home");
+  try {
+    const snapshot = await getDoc(doc(db, "activities", activityId));
+    if (!snapshot.exists()) throw new Error("找不到這個活動。");
+    currentActivity = { id: snapshot.id, ...snapshot.data() };
+    if (!canEditActivity(currentActivity)) throw new Error("只有建立者或共同管理者可以編輯活動。");
+    const form = document.querySelector("#edit-activity-form");
+    form.elements.title.value = currentActivity.title || "";
+    form.elements.activityType.value = currentActivity.activityType || "";
+    form.elements.location.value = currentActivity.location || "";
+    form.elements.startsAt.value = toLocalInput(toDate(currentActivity.startsAt));
+    form.elements.endsAt.value = toLocalInput(toDate(currentActivity.endsAt));
+    form.elements.minPeople.value = currentActivity.minPeople || 2;
+    form.elements.maxPeople.value = currentActivity.maxPeople || 10;
+    form.elements.fee.value = currentActivity.fee || 0;
+    form.elements.description.value = currentActivity.description || "";
+    form.elements.editorEmails.value = (currentActivity.editorEmails || []).join("\n");
+    document.querySelector("#co-organizer-field").hidden = currentActivity.creatorId !== currentUser.uid;
+    document.querySelector("#edit-back-button").onclick = () => navigate(`activity/${activityId}`);
+    showView("edit");
+  } catch (error) {
+    showMessage(friendlyError(error), "error");
+    navigate(`activity/${activityId}`);
+  }
+}
+
+document.querySelector("#edit-activity-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentActivity || !canEditActivity(currentActivity)) return;
+  const form = event.currentTarget;
+  const values = new FormData(form);
+  const startsAt = new Date(values.get("startsAt"));
+  const endsAt = new Date(values.get("endsAt"));
+  const minPeople = Number(values.get("minPeople"));
+  const maxPeople = Number(values.get("maxPeople"));
+  if (endsAt <= startsAt) return showMessage("結束時間必須晚於開始時間。", "error");
+  if (maxPeople < minPeople) return showMessage("正取上限不能小於最低成團人數。", "error");
+
+  const updates = {
+    title: values.get("title").trim(),
+    activityType: values.get("activityType").trim(),
+    location: values.get("location").trim(),
+    startsAt: Timestamp.fromDate(startsAt),
+    endsAt: Timestamp.fromDate(endsAt),
+    minPeople,
+    maxPeople,
+    fee: Number(values.get("fee")),
+    description: values.get("description").trim(),
+    updatedAt: serverTimestamp()
+  };
+  if (currentActivity.creatorId === currentUser.uid) {
+    updates.editorEmails = [...new Set(values.get("editorEmails")
+      .split(/[\n,;]+/)
+      .map((email) => email.trim().toLowerCase())
+      .filter((email) => email && email !== (currentUser.email || "").toLowerCase()))];
+  }
+
+  const saveButton = document.querySelector("#save-activity-button");
+  saveButton.disabled = true;
+  saveButton.textContent = "儲存中…";
+  try {
+    await updateDoc(doc(db, "activities", currentActivity.id), updates);
+    void sendFirebaseMail("firebase_activity_changed", currentActivity.id)
+      .catch((error) => console.error("Activity email failed", error));
+    showMessage("活動內容已更新。", "success");
+    await loadPublicActivities();
+    navigate(`activity/${currentActivity.id}`);
+  } catch (error) {
+    showMessage(friendlyError(error), "error");
+  } finally {
+    saveButton.disabled = false;
+    saveButton.textContent = "儲存修改";
+  }
+});
 
 function rosterItem(registration, index) {
   return `<div class="roster-item"><span>${index + 1}. ${escapeHtml(registration.displayName)}</span><small>${registration.status === "registered" ? "正取" : "候補"}</small></div>`;
@@ -425,6 +531,8 @@ async function registerForCurrentActivity() {
       createdAt: serverTimestamp()
     });
     await batch.commit();
+    void sendFirebaseMail("firebase_registration", currentActivity.id)
+      .catch((error) => console.error("Registration email failed", error));
     showMessage(status === "registered" ? "報名成功，你是正取。" : "正取已滿，已加入候補。", "success");
     await openActivity(currentActivity.id);
   } catch (error) {
@@ -455,6 +563,8 @@ async function cancelCurrentActivity() {
       status: "cancelled",
       updatedAt: serverTimestamp()
     });
+    void sendFirebaseMail("firebase_activity_changed", currentActivity.id)
+      .catch((error) => console.error("Cancellation email failed", error));
     showMessage("活動已取消。", "success");
     await loadPublicActivities();
     await openActivity(currentActivity.id);
@@ -474,6 +584,8 @@ async function loadMyActivities() {
       getDocs(collection(db, "users", currentUser.uid, "activityAccess"))
     ]);
     [...createdSnapshot.docs, ...registeredSnapshot.docs, ...accessSnapshot.docs].forEach((item) => ids.add(item.data().activityId || item.id));
+    const editorSnapshot = await getDocs(query(collection(db, "activities"), where("editorEmails", "array-contains", (currentUser.email || "").toLowerCase())));
+    editorSnapshot.docs.forEach((item) => ids.add(item.id));
     const activities = (await Promise.all([...ids].map(async (id) => {
       const snapshot = await getDoc(doc(db, "activities", id));
       return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;

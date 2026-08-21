@@ -86,6 +86,27 @@
         <article id="activity-detail" class="card detail-card"></article>
       </section>
 
+      <section id="edit-view" class="view" hidden>
+        <div class="compact-heading">
+          <button class="back-button" id="edit-back-button">← 返回活動內容</button>
+          <p class="eyebrow">EDIT ACTIVITY</p>
+          <h1>編輯活動</h1>
+        </div>
+        <form id="edit-activity-form" class="card form-grid">
+          <label class="full"><span>活動名稱</span><input name="title" minlength="2" maxlength="100" required></label>
+          <label><span>活動類型</span><input name="activityType" maxlength="40" required></label>
+          <label><span>地點</span><input name="location" maxlength="150" required></label>
+          <label><span>開始時間</span><input name="startsAt" type="datetime-local" required></label>
+          <label><span>結束時間</span><input name="endsAt" type="datetime-local" required></label>
+          <label><span>最低成團人數</span><input name="minPeople" type="number" min="2" max="100" required></label>
+          <label><span>正取上限</span><input name="maxPeople" type="number" min="2" max="100" required></label>
+          <label><span>費用</span><input name="fee" type="number" min="0" max="100000" required></label>
+          <label id="co-organizer-field" class="full"><span>共同管理者 Google Email</span><textarea name="editorEmails" rows="3" placeholder="每行一個 Email，例如：friend@gmail.com"></textarea><small>共同管理者登入後可以編輯活動，但不能取消整個活動或更改管理者名單。</small></label>
+          <label class="full"><span>活動說明</span><textarea name="description" maxlength="1000" rows="5"></textarea></label>
+          <button id="save-activity-button" class="submit-button full" type="submit">儲存修改</button>
+        </form>
+      </section>
+
       <section id="mine-view" class="view" hidden>
         <div class="compact-heading">
           <button class="back-button" data-route="home">← 返回活動列表</button>
@@ -108,6 +129,6 @@
       </form>
     </dialog>
 
-    <script type="module" src="/app.js?v=2"></script>
+    <script type="module" src="/app.js?v=5"></script>
   </body>
 </html>

@@ -67,6 +67,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid rgba(47,125,98,.1
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; padding: clamp(1.25rem, 5vw, 2.5rem); }
 .form-grid .full { grid-column: 1 / -1; }
+.form-grid label small { color: var(--muted); font-size: .78rem; font-weight: 600; line-height: 1.5; }
 .visibility-options { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; }
 .visibility-options legend { padding: 0 .35rem; font-weight: 850; }
 .visibility-options label { display: flex; gap: .7rem; padding: .9rem; border-radius: .8rem; background: #f6f9f7; }
