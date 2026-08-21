@@ -44,6 +44,7 @@ from app.schemas import ActivityRead
 
 
 BASE_DIR = Path(__file__).resolve().parent
+APP_VERSION = "0.2.1"
 logger = logging.getLogger(__name__)
 REMINDER_API_MIN_INTERVAL_SECONDS = 25 * 60
 _reminder_api_lock = asyncio.Lock()
@@ -86,7 +87,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="JoinMate",
     description="讓不同社群與朋友一起建立、報名活動的揪團系統",
-    version="0.2.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -1661,7 +1662,7 @@ def list_activities(database: Session = Depends(get_db)) -> list[Activity]:
 
 @app.get("/api/health")
 def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": "JoinMate"}
+    return {"status": "ok", "service": "JoinMate", "version": APP_VERSION}
 
 
 @app.post("/api/reminders/run")
