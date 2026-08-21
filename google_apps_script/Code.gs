@@ -17,7 +17,7 @@ function setupJoinMate() {
   ScriptApp.getProjectTriggers()
     .filter((trigger) => trigger.getHandlerFunction() === 'wakeJoinMate')
     .forEach((trigger) => ScriptApp.deleteTrigger(trigger));
-  ScriptApp.newTrigger('wakeJoinMate').timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger('wakeJoinMate').timeBased().everyMinutes(30).create();
 
   console.log('請複製到 Render 的 JOINMATE_EMAIL_SECRET：' + secret);
   return secret;

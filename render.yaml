@@ -20,3 +20,5 @@ services:
         generateValue: true
       - key: JOINMATE_HTTPS_ONLY
         value: "1"
+      - key: JOINMATE_ENABLE_REMINDER_WORKER
+        value: "0"

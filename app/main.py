@@ -1,12 +1,13 @@
 import asyncio
 import os
 import secrets
+import time as monotonic_time
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -42,6 +43,9 @@ from app.schemas import ActivityRead
 
 
 BASE_DIR = Path(__file__).resolve().parent
+REMINDER_API_MIN_INTERVAL_SECONDS = 25 * 60
+_reminder_api_lock = asyncio.Lock()
+_last_reminder_api_run = 0.0
 
 
 @asynccontextmanager
@@ -59,13 +63,16 @@ async def lifespan(_: FastAPI):
             if first_user is not None:
                 database.add(AdminUser(user_id=first_user.id))
         database.commit()
-    reminder_task = asyncio.create_task(reminder_worker())
+    reminder_task = None
+    if os.getenv("JOINMATE_ENABLE_REMINDER_WORKER", "0") == "1":
+        reminder_task = asyncio.create_task(reminder_worker())
     try:
         yield
     finally:
-        reminder_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await reminder_task
+        if reminder_task is not None:
+            reminder_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await reminder_task
 
 
 app = FastAPI(
@@ -1070,6 +1077,7 @@ def edit_activity_page(
 def edit_activity(
     activity_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     title: Annotated[str, Form(min_length=2, max_length=100)],
     activity_type: Annotated[str, Form(min_length=1, max_length=40)],
     starts_at: Annotated[datetime, Form()],
@@ -1170,9 +1178,11 @@ def edit_activity(
             email_event="activity_changes",
         )
     database.commit()
+    background_tasks.add_task(send_pending_emails)
     return RedirectResponse(
         url=f"/activities/{activity_id}?notice=updated",
         status_code=303,
+        background=background_tasks,
     )
 
 
@@ -1180,6 +1190,7 @@ def edit_activity(
 def cancel_activity(
     activity_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     database: Session = Depends(get_db),
 ):
     current_user_id = require_session_user_id(request)
@@ -1211,9 +1222,11 @@ def cancel_activity(
         )
 
     database.commit()
+    background_tasks.add_task(send_pending_emails)
     return RedirectResponse(
         url=f"/activities/{activity_id}?notice=activity_cancelled",
         status_code=303,
+        background=background_tasks,
     )
 
 
@@ -1427,6 +1440,7 @@ def save_activity_feedback(
 def register_member(
     activity_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     invite_code: Annotated[str, Form(max_length=20)] = "",
     database: Session = Depends(get_db),
 ):
@@ -1517,9 +1531,11 @@ def register_member(
             )
 
     database.commit()
+    background_tasks.add_task(send_pending_emails)
     return RedirectResponse(
         url=f"/activities/{activity_id}?notice={new_status}",
         status_code=303,
+        background=background_tasks,
     )
 
 
@@ -1528,6 +1544,7 @@ def cancel_registration(
     activity_id: int,
     registration_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     database: Session = Depends(get_db),
 ):
     current_user_id = require_session_user_id(request)
@@ -1608,10 +1625,12 @@ def cancel_registration(
             )
 
     database.commit()
+    background_tasks.add_task(send_pending_emails)
     notice = "cancelled_promoted" if promoted is not None else "cancelled"
     return RedirectResponse(
         url=f"/activities/{activity_id}?notice={notice}",
         status_code=303,
+        background=background_tasks,
     )
 
 
@@ -1639,6 +1658,8 @@ def health_check() -> dict[str, str]:
 
 @app.post("/api/reminders/run")
 async def run_scheduled_reminders(request: Request) -> dict[str, int | str]:
+    global _last_reminder_api_run
+
     expected_secret = os.getenv("JOINMATE_EMAIL_SECRET", "").strip()
     if not expected_secret:
         raise HTTPException(status_code=503, detail="Email reminders are not configured")
@@ -1653,8 +1674,25 @@ async def run_scheduled_reminders(request: Request) -> dict[str, int | str]:
     if not secrets.compare_digest(provided_secret, expected_secret):
         raise HTTPException(status_code=403, detail="Invalid reminder secret")
 
-    reminders_created = await asyncio.to_thread(check_activity_reminders)
-    emails_sent = await asyncio.to_thread(send_pending_emails)
+    async with _reminder_api_lock:
+        current_monotonic_time = monotonic_time.monotonic()
+        elapsed_seconds = current_monotonic_time - _last_reminder_api_run
+        if (
+            _last_reminder_api_run > 0
+            and elapsed_seconds < REMINDER_API_MIN_INTERVAL_SECONDS
+        ):
+            return {
+                "status": "skipped",
+                "retry_after_seconds": int(
+                    REMINDER_API_MIN_INTERVAL_SECONDS - elapsed_seconds
+                ),
+                "reminders_created": 0,
+                "emails_sent": 0,
+            }
+        _last_reminder_api_run = current_monotonic_time
+
+        reminders_created = await asyncio.to_thread(check_activity_reminders)
+        emails_sent = await asyncio.to_thread(send_pending_emails)
     return {
         "status": "ok",
         "reminders_created": reminders_created,
