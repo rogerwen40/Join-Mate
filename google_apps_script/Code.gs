@@ -75,6 +75,9 @@ function handleFirebaseMail(payload) {
   if (payload.action === 'firebase_registration') {
     return sendFirebaseRegistrationEmail(user, activityId, activity, idToken);
   }
+  if (payload.action === 'firebase_registration_cancelled') {
+    return sendFirebaseRegistrationCancelledEmail(user, activityId, activity);
+  }
   if (payload.action === 'firebase_activity_changed') {
     return sendFirebaseActivityChangedEmails(user, activityId, activity, idToken);
   }
@@ -125,6 +128,23 @@ function sendFirebaseRegistrationEmail(user, activityId, activity, idToken) {
     details.html;
   sendJoinMateEmail(user.email, subject, body, htmlBody);
   cache.put(cacheKey, '1', 21600);
+  return jsonResponse({ok: true, sent: 1});
+}
+
+function sendFirebaseRegistrationCancelledEmail(user, activityId, activity) {
+  const cacheKey = 'jm-reg-cancel-' + user.localId + '-' + activityId;
+  const cache = CacheService.getScriptCache();
+  if (cache.get(cacheKey)) return jsonResponse({ok: true, skipped: 'duplicate'});
+
+  const subject = '[JoinMate] 已取消報名｜' + String(activity.title || '活動');
+  const details = activityDetails(activity, activityId);
+  const body = (user.displayName || user.email) + ' 您好：\n\n' +
+    '你已取消「' + activity.title + '」的報名。\n\n' + details.text;
+  const htmlBody = '<p>' + escapeHtml(user.displayName || user.email) + ' 您好：</p>' +
+    '<p>你已取消「<strong>' + escapeHtml(activity.title) + '</strong>」的報名。</p>' +
+    details.html;
+  sendJoinMateEmail(user.email, subject, body, htmlBody);
+  cache.put(cacheKey, '1', 300);
   return jsonResponse({ok: true, sent: 1});
 }
 

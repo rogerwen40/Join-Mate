@@ -37,6 +37,7 @@ const mineGrid = document.querySelector("#mine-grid");
 const mineEmpty = document.querySelector("#mine-empty");
 const detailContainer = document.querySelector("#activity-detail");
 const inviteDialog = document.querySelector("#invite-dialog");
+const editActivityForm = document.querySelector("#edit-activity-form");
 
 let auth;
 let db;
@@ -435,7 +436,10 @@ async function openEditActivity(activityId) {
     if (!snapshot.exists()) throw new Error("找不到這個活動。");
     currentActivity = { id: snapshot.id, ...snapshot.data() };
     if (!canEditActivity(currentActivity)) throw new Error("只有建立者或共同管理者可以編輯活動。");
-    const form = document.querySelector("#edit-activity-form");
+    const form = editActivityForm;
+    if (!form) {
+      throw new Error("編輯表單載入失敗，請按 Ctrl + F5 重新整理後再試。");
+    }
     form.elements.title.value = currentActivity.title || "";
     form.elements.activityType.value = currentActivity.activityType || "";
     form.elements.location.value = currentActivity.location || "";
@@ -455,7 +459,7 @@ async function openEditActivity(activityId) {
   }
 }
 
-document.querySelector("#edit-activity-form").addEventListener("submit", async (event) => {
+editActivityForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!currentActivity || !canEditActivity(currentActivity)) return;
   const form = event.currentTarget;
@@ -548,6 +552,8 @@ async function cancelCurrentRegistration() {
     batch.delete(doc(db, "activities", currentActivity.id, "registrations", currentUser.uid));
     batch.delete(doc(db, "users", currentUser.uid, "registrations", currentActivity.id));
     await batch.commit();
+    void sendFirebaseMail("firebase_registration_cancelled", currentActivity.id)
+      .catch((error) => console.error("Registration cancellation email failed", error));
     showMessage("已取消報名。", "success");
     await openActivity(currentActivity.id);
   } catch (error) {
