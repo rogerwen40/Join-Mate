@@ -405,7 +405,7 @@ function renderActivityDetail() {
     <div class="description">${escapeHtml(activity.description || "沒有其他活動說明。")}</div>
     <div class="action-row">
       ${!currentUser ? '<button class="primary-button" id="detail-login">登入後報名</button>' : ""}
-      ${currentUser && !mine && !isOwner && canRegister ? '<button class="primary-button" data-action="register">我要報名</button>' : ""}
+      ${currentUser && !mine && canRegister ? '<button class="primary-button" data-action="register">我要報名</button>' : ""}
       ${mine ? `<button class="danger-button" data-action="cancel-registration">取消${mine.status === "registered" ? "報名" : "候補"}</button>` : ""}
       ${isEditor ? '<button class="primary-button" data-action="edit-activity">編輯活動</button>' : ""}
       ${isOwner && activity.status === "open" ? '<button class="danger-button" data-action="cancel-activity">取消整個活動</button>' : ""}
